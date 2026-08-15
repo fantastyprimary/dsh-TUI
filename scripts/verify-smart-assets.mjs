@@ -4,8 +4,9 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { readPresetMetadata } from '@deepseek-ai/dsh-agent-presets'
 
-import { apply as applyRouter } from '../smart-assets/router-standard/router-bootstrap.mjs'
+import { apply as applyRouter } from '../smart-assets/router-standard/router-bootstrap-v1.mjs'
 import {
   applyPersona,
   bandFor,
@@ -13,6 +14,7 @@ import {
   coreFor,
   extractText,
   isFlashModel,
+  isProModel,
   parseMode,
   personaFor,
   sessionMode,
@@ -32,21 +34,55 @@ test('smart is packaged as an enhancement asset, not a roster preset', () => {
     'NOTICE',
     'agent.cordis.yml',
     'preset.yml',
+    'router-bootstrap-v1.mjs',
     'router-bootstrap.mjs',
     'router-core.mjs',
   ])
 
-  assert.equal(manifest.enhancements.smart.sources.router.sha, '9cacc362abc0b92fe3aaf574739d5c565fe87249')
+  assert.equal(manifest.enhancements.smart.sources.suite.sha, 'eb1b00da039df34c0ab6012b2c93aadc28de391c')
+  assert.equal(manifest.enhancements.smart.sources.router.sha, '7426c9cebc0999961aa6197eb42461d92a3ac3ee')
+  assert.equal(manifest.enhancements.smart.sources.router.tag, 'v0.3.0')
+  assert.equal(manifest.enhancements.smart.sources.router.sourceDirectory, 'preset/router-standard')
+  assert.deepEqual(manifest.enhancements.smart.sources.router.policySourceDirectories, [
+    'preset/router-standard',
+    'preset/router-pro',
+  ])
+  assert.equal(manifest.enhancements.smart.sources.router.tagMutable, false)
+  assert.equal(manifest.enhancements.smart.sources.modeBoost.sha, 'a9a666a6ec83ae72c6f683300384554e41131880')
+  assert.equal(manifest.enhancements.smart.sources.modeBoost.vendored, false)
   assert.equal(manifest.enhancements.smart.sources.injector.vendored, false)
   assert.deepEqual(
     manifest.enhancements.smart.upstreamReview.decisions.map(item => item.ref),
-    ['dsh-routing-suite#11', 'dsh-routing-suite#6', 'dsh-routing-suite#10', 'dsh-routing-suite#1'],
+    [
+      'dsh-routing-suite#13',
+      'dsh-routing-suite#12',
+      'dsh-routing-suite#11',
+      'dsh-routing-suite#6',
+      'dsh-routing-suite#10',
+      'dsh-routing-suite#1',
+      'dsh-router-standard#11',
+      'dsh-router-standard#10',
+      'dsh-router-standard#8',
+      'dsh-router-standard#7',
+      'dsh-router-standard#6',
+      'dsh-router-standard#5',
+      'dsh-router-standard#9',
+      'dsh-router-standard#2',
+      'dsh-mode-boost@a9a666a',
+    ],
   )
 
   for (const [file, expected] of Object.entries(manifest.enhancements.smart.sources.router.files)) {
     const actual = createHash('sha256').update(readFileSync(join(routerRoot, file))).digest('hex')
     assert.equal(actual, expected, file)
   }
+})
+
+test('Router Standard metadata remains parseable by the DSH preset reader', async () => {
+  assert.deepEqual(await readPresetMetadata(routerRoot), {
+    name: 'Router Standard (experimental)',
+    description: 'Task-aware routing — RL-interface restoration: one-sentence persona + shell/editor surface; think-act feedback loops. Full Standard tools after the first tool call.',
+  })
 })
 
 // These 15 cases mirror router.test.mjs at the router SHA pinned in manifest.json.
@@ -101,8 +137,8 @@ test('upstream router-core 6/15: nested user messages still classify', () => {
 test('upstream router-core 7/15: weak persona is model-specific', () => {
   const pro = personaFor('weak', 'deepseek-v4-pro')
   const flash = personaFor('weak', 'deepseek-v4-flash')
-  assert.ok(pro.includes('decide the task type (build or fix)'))
-  assert.ok(pro.includes('You are a helpful software engineer assistant.'))
+  assert.ok(pro.includes('Match your working style to the task type'))
+  assert.ok(pro.includes('fix the broken login flow'))
   assert.ok(!pro.includes('review what you have already done'))
   assert.ok(flash.includes('decide the task type (build or fix)'))
   assert.ok(flash.includes('review what you have already done'))
@@ -110,6 +146,9 @@ test('upstream router-core 7/15: weak persona is model-specific', () => {
   assert.equal(personaFor('weak', 'deepseek-v4-flash'), personaFor('weak', 'deepseek-v4-flash'))
   assert.equal(isFlashModel('deepseek-v4-flash'), true)
   assert.equal(isFlashModel('deepseek-v4-pro'), false)
+  assert.equal(isProModel('deepseek-v4-pro'), true)
+  assert.equal(isProModel('deepseek-v4-flash'), false)
+  assert.equal(isProModel('other-pro'), false)
 })
 
 test('upstream router-core 8/15: parseMode accepts weak', () => {
@@ -119,38 +158,37 @@ test('upstream router-core 8/15: parseMode accepts weak', () => {
 
 test('upstream router-core 9/15: persona quantizes to measured bands', () => {
   assert.equal(personaFor(0), 'You are a helpful software engineer assistant.')
-  assert.equal(personaFor(0.1), 'You are a helpful software engineer assistant.')
-  assert.ok(personaFor(0.3).includes('Work directly'))
-  assert.ok(!personaFor(0.3).includes('test harnesses'))
+  assert.equal(personaFor(0.02), 'You are a helpful software engineer assistant.')
+  assert.equal(personaFor(0.3), 'You are a helpful software engineer assistant.')
   assert.ok(personaFor(1).includes('hands-on'))
   assert.ok(personaFor(1).includes('do not build test harnesses'))
 })
 
 test('upstream router-core 10/15: core tools vary by band', () => {
-  assert.deepEqual(coreFor(0), ['read', 'edit', 'glob', 'grep'])
+  assert.deepEqual(coreFor(0), ['str_replace_editor'])
   assert.deepEqual(coreFor(1), ['read', 'write', 'edit'])
-  assert.deepEqual(coreFor(0.3), ['read', 'edit', 'write', 'glob', 'grep'])
+  assert.deepEqual(coreFor(0.3), ['read', 'write', 'edit'])
   assert.deepEqual(coreFor('weak'), ['str_replace_editor'])
 })
 
 test('upstream router-core 11/15: phase transition boundaries are stable', () => {
-  assert.equal(bandFor(0.1), 'spec')
-  assert.equal(bandFor(0.2), 'mixed')
-  assert.equal(bandFor(0.4), 'mixed')
-  assert.equal(bandFor(0.5), 'react')
+  assert.equal(bandFor(0.02), 'spec')
+  assert.equal(bandFor(0.03), 'mixed')
+  assert.equal(bandFor(0.454), 'mixed')
+  assert.equal(bandFor(0.455), 'react')
   assert.equal(bandFor(0.99), 'react')
 })
 
 test('upstream router-core 12/15: testiness rises toward spec', () => {
   assert.equal(testinessFor(1), 'suppressed')
   assert.equal(testinessFor(0), 'normal')
-  assert.equal(testinessFor(0.3), 'light')
+  assert.equal(testinessFor(0.3), 'normal')
 })
 
 test('upstream router-core 13/15: parseMode accepts supported tokens', () => {
   assert.equal(parseMode('spec'), 0)
   assert.equal(parseMode('react'), 1)
-  assert.equal(parseMode('balanced'), 0.3)
+  assert.equal(parseMode('balanced'), null)
   assert.equal(parseMode('70'), 0.7)
   assert.equal(parseMode('0.3'), 0.3)
   assert.equal(parseMode('auto'), 'auto')
@@ -177,45 +215,180 @@ test('upstream router-core 15/15: applyPersona accepts empty sections', () => {
   assert.deepEqual(applyPersona([], 'p'), [{ name: 'router-persona', text: 'p', order: 0 }])
 })
 
-test('smart bootstrap handles a real weak session event and later promotion', async () => {
+function routerHarness(
+  agentPreset = 'standard',
+  id = `smart-${agentPreset}`,
+  model = 'deepseek-v4-flash',
+) {
   const listeners = new Map()
+  const rootListeners = new Map()
+  const registeredTools = new Map()
   const appended = []
   const session = {
-    id: 'smart-weak',
-    header: { agentPreset: 'standard' },
-    events: [{
-      type: 'user/message',
-      data: {
-        source: { kind: 'user' },
-        content: [{ type: 'text', text: 'Please take a look at this request.' }],
-      },
-    }],
+    id,
+    header: { agentPreset },
+    events: [],
   }
-  assert.equal(sessionMode(session), 'weak')
-
   const agent = {
     session,
-    options: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+    options: { provider: 'deepseek-official', model },
     inbox: { append(target, message) { appended.push({ target, message }) } },
   }
   const ctx = {
+    agent,
+    root: {
+      on(event, listener) {
+        rootListeners.set(event, listener)
+        return () => rootListeners.delete(event)
+      },
+    },
     on(event, listener) { listeners.set(event, listener) },
     effect(register) { return register() },
-    tools: { register() { return () => {} } },
+    tools: {
+      register(tool) {
+        registeredTools.set(tool.name, tool)
+        return () => registeredTools.delete(tool.name)
+      },
+    },
     get(service) { return service === 'agent' ? agent : undefined },
     llm: { stream() { throw new Error('not used by this regression') } },
   }
   applyRouter(ctx, {})
+  return {
+    agent,
+    appended,
+    listeners,
+    registeredTools,
+    session,
+    insert(text, source = { kind: 'user' }) {
+      const message = { source, content: [{ type: 'text', text }] }
+      rootListeners.get('agent/inbox/inserted')({ agent, message })
+      return message
+    },
+  }
+}
 
-  const onEvent = listeners.get('session/event')
-  assert.equal(typeof onEvent, 'function')
-  assert.doesNotThrow(() => onEvent(session, session.events[0]))
-  assert.equal(appended.length, 1)
-  assert.equal(appended[0].target, 'next-step')
-  assert.equal(appended[0].message.source.plugin, 'router-bootstrap')
+test('Smart captures and classifies real inbox text before the first assembly', () => {
+  const cases = [
+    ['Build a new web application', 'react', 0],
+    ['Fix the broken login flow', 'spec', 0],
+    ['Please take a look at this request.', 'weak', 1],
+  ]
+  for (const [text, band, guideCount] of cases) {
+    const harness = routerHarness('standard', `first-${band}`)
+    const message = harness.insert(text)
+    const status = harness.registeredTools.get('dev_router_status').execute()
+    assert.match(status, new RegExp(`band=${band}`), text)
+    assert.equal(harness.appended.length, guideCount, text)
+    if (guideCount === 1) {
+      assert.equal(harness.appended[0].target, 'next-step')
+      assert.equal(harness.appended[0].message.source.plugin, 'router-bootstrap')
+      harness.insert(harness.appended[0].message.content[0].text, harness.appended[0].message.source)
+      assert.equal(harness.appended.length, 1, 'plugin guidance must not recurse')
+    }
+    assert.equal(message.source.kind, 'user')
+  }
+})
 
+test('V4 Pro Smart routes build, fix, and ambiguous first requests without a budget cap', async () => {
+  const cases = [
+    {
+      id: 'pro-build',
+      text: 'Build a new web application.',
+      persona: /hands-on software engineer/,
+      tools: ['bash', 'read', 'write', 'edit'],
+      guide: /Work directly\. End each reasoning block/,
+    },
+    {
+      id: 'pro-fix',
+      text: 'Fix the broken login flow.',
+      persona: /helpful software engineer assistant/,
+      tools: ['bash', 'str_replace_editor'],
+      guide: /Think deeply about the task\. End each reasoning block/,
+    },
+    {
+      id: 'pro-weak',
+      text: 'Please take a look at this request.',
+      persona: /Match your working style to the task type/,
+      tools: ['bash', 'str_replace_editor'],
+      guide: /Router: classify this task/,
+    },
+  ]
+  for (const expected of cases) {
+    const harness = routerHarness('standard', expected.id, 'deepseek-v4-pro')
+    harness.insert(expected.text)
+    const assembled = await harness.listeners.get('system-prompt/assemble')(
+      undefined,
+      { agent: harness.agent },
+      async () => ({
+        sections: [{ name: 'persona', text: 'base' }],
+        contexts: [{ name: 'sandbox:policy', text: 'workspace-write' }],
+        tools: ['bash', 'str_replace_editor', 'read', 'write', 'edit', 'goal', 'subagent']
+          .map(name => ({ name })),
+      }),
+    )
+    assert.deepEqual(assembled.tools.map(tool => tool.name), expected.tools, expected.id)
+    assert.match(assembled.sections.find(section => section.name === 'router-persona').text, expected.persona)
+    assert.deepEqual(assembled.contexts, [])
+    assert.equal(harness.appended.length, 1)
+    assert.match(harness.appended[0].message.content[0].text, expected.guide)
+  }
+})
+
+test('V4 Pro Smart leaves active plan and goal guidance channels untouched', () => {
+  const plan = routerHarness('standard', 'pro-active-plan', 'deepseek-v4-pro')
+  plan.session.events.push({ type: 'plan/mode', data: { active: true } })
+  plan.insert('Build a new application while plan mode is active.')
+  assert.equal(plan.appended.length, 0)
+
+  const goal = routerHarness('standard', 'pro-active-goal', 'deepseek-v4-pro')
+  goal.session.events.push({
+    type: 'user/message',
+    data: {
+      source: {
+        kind: 'goal',
+        change: {
+          kind: 'goal/change',
+          operation: 'create',
+          goal: { phase: 'active' },
+        },
+      },
+    },
+  })
+  goal.insert('Build the next part of the active goal.')
+  assert.equal(goal.appended.length, 0)
+})
+
+test('Smart routing preserves delegated persona and policy contexts', async () => {
+  const harness = routerHarness('standard', 'delegated-pro-build', 'deepseek-v4-pro')
+  harness.session.header.origin = 'subagent'
+  harness.session.header.parentSession = 'parent'
+  harness.insert('Build a new delegated application.')
+  const sections = [
+    { name: 'deployment:persona', text: 'Delegated specialist.' },
+    { name: 'dsh-tui:smart', text: '<!-- dsh-tui-smart:v1 -->' },
+  ]
+  const contexts = [
+    { name: 'subagent:delegation', text: 'Do not widen permissions.' },
+    { name: 'sandbox:policy', text: 'read-only' },
+  ]
+  const assembled = await harness.listeners.get('system-prompt/assemble')(
+    undefined,
+    { agent: harness.agent },
+    async () => ({
+      sections,
+      contexts,
+      tools: ['bash', 'str_replace_editor', 'read', 'write', 'edit'].map(name => ({ name })),
+    }),
+  )
+  assert.deepEqual(assembled.sections, sections)
+  assert.deepEqual(assembled.contexts, contexts)
+  assert.deepEqual(assembled.tools.map(tool => tool.name), ['bash', 'read', 'write', 'edit'])
+})
+
+test('fresh Standard + Smart exposes the exact RL tools and no runtime contexts', async () => {
+  const { agent, listeners } = routerHarness()
   const tools = [
-    { name: 'pwsh' },
     { name: 'bash' },
     { name: 'str_replace_editor' },
     { name: 'read' },
@@ -228,37 +401,71 @@ test('smart bootstrap handles a real weak session event and later promotion', as
   const assemble = listeners.get('system-prompt/assemble')
   assert.equal(typeof assemble, 'function')
   const fresh = await assemble(undefined, { agent }, async () => ({
-    sections: [{ name: 'persona', text: 'old' }, { name: 'plan-mode', text: 'keep' }],
+    sections: [{ name: 'persona', text: 'old' }],
     contexts: ['workspace'],
     tools,
   }))
-  assert.deepEqual(fresh.tools.map(tool => tool.name), ['pwsh', 'str_replace_editor'])
-  assert.ok(fresh.sections.some(section => section.name === 'plan-mode'))
-
-  session.events.push({ type: 'tool/call', data: { name: 'bash' } })
-  const promoted = await assemble(undefined, { agent }, async () => ({ sections: [], contexts: [], tools }))
-  assert.deepEqual(promoted.tools, tools)
+  assert.deepEqual(fresh.tools.map(tool => tool.name), ['bash', 'str_replace_editor'])
+  assert.deepEqual(fresh.contexts, [])
+  assert.deepEqual(fresh.sections.map(section => section.name), ['router-persona'])
+  assert.equal(fresh.sections.find(section => section.name === 'router-persona').text, 'You are a helpful software engineer assistant.')
 })
 
-test('smart overlay preserves non-standard preset tool catalogs and contexts', async () => {
+test('active plan + Smart keeps the complete native workflow surface', async () => {
+  const { agent, listeners } = routerHarness()
+  const assembled = {
+    sections: [{ name: 'persona', text: 'old' }, { name: 'plan:policy', text: 'keep' }],
+    contexts: [{ name: 'workflow:runtime', text: 'active' }],
+    tools: ['bash', 'str_replace_editor', 'exit_plan_mode', 'goal', 'subagent', 'workflow']
+      .map(name => ({ name })),
+  }
+  const result = await listeners.get('system-prompt/assemble')(
+    undefined,
+    { agent },
+    async () => assembled,
+  )
+  assert.equal(result, assembled)
+})
+
+test('promotion restores the full Standard catalog and runtime contexts', async () => {
+  const { agent, listeners, session } = routerHarness()
+  const tools = ['bash', 'str_replace_editor', 'read', 'write', 'edit', 'glob', 'grep', 'todo_write'].map(name => ({ name }))
+  const contexts = [
+    { name: 'sandbox:policy', text: 'workspace-write' },
+    { name: 'approval:policy', text: 'ask' },
+  ]
+  session.events.push({ type: 'tool/call', data: { name: 'bash' } })
+  const promoted = await listeners.get('system-prompt/assemble')(
+    undefined,
+    { agent },
+    async () => ({ sections: [{ name: 'persona', text: 'base' }], contexts, tools }),
+  )
+  assert.deepEqual(promoted.tools, tools)
+  assert.deepEqual(promoted.contexts, contexts)
+  assert.deepEqual(promoted.sections, [{ name: 'persona', text: 'base' }])
+})
+
+test('a tool-less first answer and inherited Smart fork history start promoted', async () => {
+  for (const [id, events, seedLength] of [
+    ['tool-less', [{ type: 'assistant/message' }, { type: 'turn/end' }], 0],
+    ['runtime-fork', [{ type: 'user/message' }, { type: 'session/end-seed' }], 2],
+  ]) {
+    const { agent, listeners, session } = routerHarness('standard', id)
+    session.events.push(...events)
+    session.header.seedLength = seedLength
+    const assembled = {
+      sections: [{ name: 'persona', text: 'base' }, { name: 'plan:policy', text: 'plan' }],
+      contexts: [{ name: 'sandbox:policy', text: 'workspace-write' }],
+      tools: [{ name: 'bash' }, { name: 'str_replace_editor' }, { name: 'read' }],
+    }
+    const result = await listeners.get('system-prompt/assemble')(undefined, { agent }, async () => assembled)
+    assert.equal(result, assembled, id)
+  }
+})
+
+test('Smart preserves non-Standard native tools and contexts without its editor overlay', async () => {
   for (const agentPreset of ['code', 'minimal', 'cordis', 'custom']) {
-    const listeners = new Map()
-    const session = {
-      id: `smart-${agentPreset}`,
-      header: { agentPreset },
-      events: [{
-        type: 'user/message',
-        data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Build this feature' }] },
-      }],
-    }
-    const agent = { session, options: { model: 'deepseek-v4-pro' }, inbox: { append() {} } }
-    const ctx = {
-      on(event, listener) { listeners.set(event, listener) },
-      effect(register) { return register() },
-      tools: { register() { return () => {} } },
-      get(service) { return service === 'agent' ? agent : undefined },
-    }
-    applyRouter(ctx, {})
+    const { agent, listeners } = routerHarness(agentPreset)
     const tools = [
       { name: 'bash' },
       { name: 'read' },
@@ -272,39 +479,35 @@ test('smart overlay preserves non-standard preset tool catalogs and contexts', a
       { agent },
       async () => ({ sections: [{ name: 'persona', text: 'base' }], contexts: ['native-context'], tools }),
     )
-    assert.deepEqual(assembled.tools, tools, agentPreset)
+    assert.deepEqual(
+      assembled.tools,
+      tools.filter(tool => tool.name !== 'str_replace_editor'),
+      agentPreset,
+    )
     assert.deepEqual(assembled.contexts, ['native-context'], agentPreset)
   }
 })
 
-test('smart v0.2 first-request cache classifies text instead of coercing it to mode zero', async () => {
-  const listeners = new Map()
-  const session = { id: 'smart-first-request', header: { agentPreset: 'standard' }, events: [] }
-  const appended = []
-  const agent = {
-    session,
-    options: { model: 'deepseek-v4-pro' },
-    inbox: { append(target, message) { appended.push({ target, message }) } },
-  }
-  const ctx = {
-    on(event, listener) { listeners.set(event, listener) },
-    effect(register) { return register() },
-    tools: { register() { return () => {} } },
-    get(service) { return service === 'agent' ? agent : undefined },
-  }
-  applyRouter(ctx, {})
+test('blank preset recomposition exposes the owned editor only after switching to Standard', async () => {
+  const { agent, listeners, session } = routerHarness('code', 'blank-preset-switch')
+  const tools = [{ name: 'bash' }, { name: 'str_replace_editor' }, { name: 'code' }]
+  const downstream = () => ({ sections: [{ name: 'persona', text: 'base' }], contexts: [], tools })
+  const code = await listeners.get('system-prompt/assemble')(undefined, { agent }, downstream)
+  assert.deepEqual(code.tools.map(tool => tool.name), ['bash', 'code'])
 
-  const event = {
-    type: 'user/message',
-    data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Build a new web application' }] },
-  }
-  listeners.get('session/event')(session, event)
-  const tools = ['bash', 'str_replace_editor', 'read', 'write', 'edit', 'glob', 'grep'].map(name => ({ name }))
-  const assembled = await listeners.get('system-prompt/assemble')(
+  session.events.push({ type: 'agent-preset/selected', data: { agentPreset: 'standard' } })
+  const standard = await listeners.get('system-prompt/assemble')(undefined, { agent }, downstream)
+  assert.deepEqual(standard.tools.map(tool => tool.name), ['bash', 'str_replace_editor'])
+})
+
+test('shell-less scoped child assembly remains usable', async () => {
+  const { agent, listeners, session } = routerHarness('standard', 'shell-less-child')
+  session.header.parentSession = 'parent'
+  const assembled = { sections: [{ name: 'child', text: 'restricted' }], contexts: ['child-context'], tools: [{ name: 'memory_read' }] }
+  const result = await listeners.get('system-prompt/assemble')(
     undefined,
     { agent },
-    async () => ({ sections: [{ name: 'persona', text: 'base' }], contexts: ['native'], tools }),
+    async () => assembled,
   )
-  assert.deepEqual(assembled.tools.map(tool => tool.name), ['bash', 'read', 'write', 'edit'])
-  assert.equal(appended.length, 0)
+  assert.equal(result, assembled)
 })

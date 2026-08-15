@@ -47,9 +47,17 @@
 # Task-aware reasoning-mode router: classifies the first user message and
 # injects the matching persona + first-turn core tool set; after the first
 # durable tool/call, exposes the full Standard catalog.
+#
+# routerMode (v0.2.0):
+#   standard (default) — RL 接口还原: first request carries ONLY the RL training
+#     sentence + shell/str_replace_editor; model works in think-act feedback
+#     loops (measured: 25 steps / 24 tool calls in a real session).
+#   spec — 深度思考优先: classified persona + full prompt sections; the long
+#     first-turn reasoning chain (101K chars) is a feature, not a defect.
 - id: router-bootstrap
-  name: ./router-bootstrap.mjs
-  config: {}
+  name: ./router-bootstrap-v1.mjs
+  config:
+    routerMode: standard
 
 # ── shell ───────────────────────────────────────────────────────────────────
 

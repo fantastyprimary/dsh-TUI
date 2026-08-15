@@ -42,7 +42,7 @@ const {
   writeSmartSession,
 } = smartPrefs
 
-const prefsDir = join(testHome, '.dsh-cc')
+const prefsDir = join(testHome, '.dsh-tui')
 const prefsFile = join(prefsDir, 'smart.json')
 
 function requestHeader(seq, smart) {

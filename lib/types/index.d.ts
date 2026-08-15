@@ -63,6 +63,10 @@ export interface Config {
      *  dsh-routing-suite; runtime `/smart` switches persist separately from
      *  `/preset`. */
     smart?: boolean;
+    /** Enable the ForceSmart two-phase Anchored enhancement. It is tuned for
+     *  DeepSeek V4 Pro but silently allowed on every route. It is mutually
+     *  exclusive with Smart and wins when both static options are true. */
+    forceSmart?: boolean;
     /** Shift+Tab session-mode cycle (array order IS the cycle order; index 0
      *  is the unmarked base mode). Each entry bundles any subset of the
      *  `plan`/`sandbox`/`approval` atoms; absent → the built-in

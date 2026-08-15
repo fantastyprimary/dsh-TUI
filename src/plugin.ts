@@ -19,6 +19,12 @@ import type { ModelRoute } from './modelRoute.js'
 import { readPresetPref } from './presetPrefs.js'
 import { composePreset, resolvePersistedPreset, runningPresetOf } from './presets.js'
 import { readSmartDefault, resolvePersistedSmart, smartModeOf, writeSmartSession } from './smartPrefs.js'
+import {
+  forceSmartModeOf,
+  readForceSmartDefault,
+  resolvePersistedForceSmart,
+  writeForceSmartSession,
+} from './forceSmartPrefs.js'
 import { clearResumeTarget, writeResumeTarget } from './sessionHistory.js'
 import { resolveSessionCwd } from './utils/workspaceRoot.js'
 import { checkForTuiUpdate, installedTuiVersion, isVersionNewer, resolveDshProfileName, resolveTuiUpdateTarget, updateTuiAndRestart } from './update.js'
@@ -26,6 +32,7 @@ import { isLang, resolveStartupLang, setLang, t } from './i18n.js'
 import { detectLegacyEnv, migrateLegacyDataDir, RENAMED_ENV } from './utils/paths.js'
 import { Chat } from './screens/Chat.js'
 import { attachSessionToWorkspace } from './workspace.js'
+import { resolveEnhancementSelection } from './enhancementPrefs.js'
 import { render, ThemeProvider, AlternateScreen } from './ui.js'
 import instances from './ink/instances.js'
 import { cursorMove, DISABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS } from './ink/termio/csi.js'
@@ -165,20 +172,31 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // here — the agent meta and the channel must agree.
   const sessionCwd = resolveSessionCwd(config.cwd)
   const meta = { cwd: sessionCwd }
-  const { agent, handle, agentPreset, smart, route: createdRoute } = await resolveAgent(
+  const { smart: startupSmart, forceSmart: startupForceSmart } = resolveEnhancementSelection(
+    config.smart,
+    config.forceSmart,
+    readSmartDefault(),
+    readForceSmartDefault(),
+  )
+  const { agent, handle, agentPreset, smart, forceSmart, route: createdRoute } = await resolveAgent(
     ctx,
     config.sessionId,
     configuredRoute,
     startupRoute,
     meta,
     config.preset,
-    config.smart ?? readSmartDefault() ?? false,
+    startupSmart,
+    startupForceSmart,
   )
   try {
     // Opening a persisted TUI session is an explicit ownership action too.
     // Older TUI versions only wrote the Session log, so attaching on every
     // startup repairs those durable-but-ungrouped sessions idempotently.
-    const attached = await attachSessionToWorkspace(ctx, meta.cwd, agent.session.id)
+    const attached = await attachSessionToWorkspace(
+      ctx,
+      agent.session.header.cwd ?? meta.cwd,
+      agent.session.id,
+    )
     if (!attached) {
       ctx.logger.warn(
         `dsh-tui: session "${agent.session.id}" has no workspace ownership because workspaceRegistry is not mounted`,
@@ -224,6 +242,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     agentPreset,
     smart,
     configuredSmart: config.smart,
+    forceSmart,
+    configuredForceSmart: config.forceSmart,
     // Shift+Tab session-mode cycle (undefined → the built-in default/
     // plan/full cycle in sessionModes.ts).
     modes: config.modes,
@@ -429,7 +449,15 @@ async function resolveAgent(
   meta: { cwd: string },
   configuredPreset?: string,
   startupSmart = false,
-): Promise<{ agent: Agent; handle?: AgentHandle; agentPreset?: string; smart: boolean; route?: ModelRoute }> {
+  startupForceSmart = false,
+): Promise<{
+  agent: Agent
+  handle?: AgentHandle
+  agentPreset?: string
+  smart: boolean
+  forceSmart: boolean
+  route?: ModelRoute
+}> {
   // Resume override (issue #67): cordis.yml overrides the target session's
   // recorded route only when it pins BOTH halves; undefined halves let the
   // session's own request/header records win (issue #30).
@@ -439,10 +467,12 @@ async function resolveAgent(
     const resumeId = SessionId(requestedSessionId)
     const existing = ctx.agents.get(resumeId)
     if (existing !== undefined) {
+      const forceSmart = forceSmartModeOf(existing.session)
       return {
         agent: existing,
         agentPreset: runningPresetOf(existing.session),
-        smart: smartModeOf(existing.session),
+        smart: forceSmart ? false : smartModeOf(existing.session),
+        forceSmart,
       }
     }
     try {
@@ -450,8 +480,9 @@ async function resolveAgent(
       // `agent-preset/selected` wins over the creation header), never the
       // caller's current preference.
       const persisted = await resolvePersistedPreset(ctx, resumeId)
-      const smart = await resolvePersistedSmart(ctx, resumeId)
-      const composed = await composePreset(ctx, persisted, smart)
+      const forceSmart = await resolvePersistedForceSmart(ctx, resumeId)
+      const smart = forceSmart ? false : await resolvePersistedSmart(ctx, resumeId)
+      const composed = await composePreset(ctx, persisted, smart, forceSmart)
       const resumed = await ctx.agents.resume({
         resumeSessionId: resumeId,
         agentOptions: resumeOptions,
@@ -466,6 +497,7 @@ async function resolveAgent(
         handle: resumed,
         agentPreset: composed.agentPreset,
         smart,
+        forceSmart,
         route: resumeRoute ?? recordedModelRoute(resumed.agent.session.events),
       }
     } catch (error) {
@@ -477,7 +509,12 @@ async function resolveAgent(
     }
   }
   const sessionId = SessionId(randomUUID())
-  const composed = await composePreset(ctx, configuredPreset ?? readPresetPref(), startupSmart)
+  const composed = await composePreset(
+    ctx,
+    configuredPreset ?? readPresetPref(),
+    startupSmart,
+    startupForceSmart,
+  )
   // Fresh-session route precedence (issues #14/#30/#67): resolved atomically
   // by the caller (complete cordis.yml route > the persisted `/model` choice
   // > the harness default), then validated against the adapter catalog — a
@@ -510,7 +547,15 @@ async function resolveAgent(
     )
   })
   writeSmartSession(String(sessionId), startupSmart)
-  return { agent: created.agent, handle: created, agentPreset: composed.agentPreset, smart: startupSmart, route }
+  writeForceSmartSession(String(sessionId), startupForceSmart)
+  return {
+    agent: created.agent,
+    handle: created,
+    agentPreset: composed.agentPreset,
+    smart: startupSmart,
+    forceSmart: startupForceSmart,
+    route,
+  }
 }
 
 /**

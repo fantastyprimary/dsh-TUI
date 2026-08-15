@@ -61,9 +61,14 @@ export interface Config {
    *  persisted in `~/.dsh-tui/agent-preset.json` wins, then the roster
    *  default (`standard`). */
   preset?: string
-  /** Enable the Smart routing-suite enhancement over the selected Agent
-   *  preset. Runtime `/smart` switches persist separately from `/preset`. */
+  /** Enable Smart over the selected Agent preset. Smart is based on
+   *  dsh-routing-suite; runtime `/smart` switches persist separately from
+   *  `/preset`. */
   smart?: boolean
+  /** Enable the ForceSmart two-phase Anchored enhancement. It is tuned for
+   *  DeepSeek V4 Pro but silently allowed on every route. It is mutually
+   *  exclusive with Smart and wins when both static options are true. */
+  forceSmart?: boolean
   /** Shift+Tab session-mode cycle (array order IS the cycle order; index 0
    *  is the unmarked base mode). Each entry bundles any subset of the
    *  `plan`/`sandbox`/`approval` atoms; absent → the built-in
@@ -88,6 +93,7 @@ export const Config: Schema<Config> = Schema.object({
   lang: Schema.string().required(false),
   preset: Schema.string().required(false),
   smart: Schema.boolean().required(false),
+  forceSmart: Schema.boolean().required(false),
   modes: Schema.array(
     Schema.object({
       id: Schema.string(),

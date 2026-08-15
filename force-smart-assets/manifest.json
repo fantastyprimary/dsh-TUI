@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "enhancement": {
+    "id": "force-smart",
+    "displayName": "ForceSmart",
+    "sources": {
+      "anchoredStandard": {
+        "name": "dsh-anchored-standard",
+        "url": "https://github.com/xiaobright/dsh-anchored-standard",
+        "sha": "d97bec91a3d668f4cf1d03ee5f20aae84fb6f85c",
+        "license": "MIT"
+      },
+      "liangshenReference": {
+        "name": "dsh-web-ui/packages/dsh-liangshen",
+        "url": "https://github.com/zhu1090093659/dsh-web-ui",
+        "sha": "3647a33fa467e0335260468614f6eed04b196c38",
+        "license": "Apache-2.0",
+        "role": "Pinned mechanism reference only; it is not a ForceSmart product name or alias."
+      }
+    },
+    "minimalToolPackages": {
+      "version": "0.1.0-rc.6",
+      "packages": [
+        "@deepseek-ai/dsh-tool-bash-persistent",
+        "@deepseek-ai/dsh-tool-str-replace-editor"
+      ]
+    },
+    "files": {
+      "LICENSE": "f378a902991032962a07bcabdf8bc6b4dad65b3a1fd06ed66cc2d61faaf3a32e",
+      "NOTICE": "72fe93834e2d0b873727b2a15a577623100f14731da1d1ffb2fad792400be8a6",
+      "force-bootstrap.mjs": "813d9d411736969358292cac483e12d4a4adaa1cbb5c632d4e232d1d62755b86"
+    },
+    "localDecisions": [
+      "ForceSmart remains an overlay over the selected official or custom preset.",
+      "A compatible clean request uses the exact Minimal persona and model-facing Bash/editor schemas.",
+      "The pinned reference composition's 1024 bootstrap budget and anchored trajectory gate are retained.",
+      "Active plan/goal state fails open with the complete base surface.",
+      "Child scopes never receive enhancement-owned tools and start promoted to protect one-shot delegated tasks."
+    ]
+  }
+}

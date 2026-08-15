@@ -12,6 +12,9 @@ This project builds on the DeepSeek Harness ecosystem and on prior open work:
 - The trajectory lexicon classifier follows
   **xiaobright/modeltest** (evaluator/trigger_probe, MIT): conservative
   minimal-like / standard-like classification.
+- DeepSeek V4 Pro maintenance/build/ambiguous policy selection is adapted from
+  **yjh051108/dsh-router-standard** v0.3.0 `preset/router-pro` (MIT). dsh-TUI
+  keeps it behind one Smart adapter rather than publishing another preset.
 - Project2 evaluation numbers cited in docs/ come from **xiaobright/modeltest**
   (V4.1b, frozen, personal harness; not a public benchmark).
 

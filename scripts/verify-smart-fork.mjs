@@ -11,7 +11,7 @@
  * unchanged.
  *
  * The script creates its own throwaway HOME so it never reads or writes the
- * operator's real ~/.dsh-cc preferences.
+ * operator's real ~/.dsh-tui preferences.
  *
  * Run with plain node against the compiled lib (after `pnpm build`):
  *   node scripts/verify-smart-fork.mjs
@@ -73,9 +73,16 @@ function pluginName(plugin) {
 function makeScopedContext(label) {
   const listeners = new Map()
   const pluginCalls = []
-  return {
+  const ctx = {
     label,
+    agent: {},
     pluginCalls,
+    tools: {
+      get() { return undefined },
+    },
+    isolate() {
+      return ctx
+    },
     on(event, handler) {
       let handlers = listeners.get(event)
       if (handlers === undefined) {
@@ -89,6 +96,7 @@ function makeScopedContext(label) {
       pluginCalls.push({ plugin, config, name: pluginName(plugin) })
     },
   }
+  return ctx
 }
 
 function makeHostContext(services) {
@@ -96,12 +104,25 @@ function makeHostContext(services) {
   const warnings = []
   const hostPluginCalls = []
   const root = {
+    agents: { get() { return undefined } },
+    on(event, handler) {
+      let handlers = listeners.get(event)
+      if (handlers === undefined) {
+        handlers = new Set()
+        listeners.set(event, handlers)
+      }
+      handlers.add(handler)
+      return () => handlers.delete(handler)
+    },
     async plugin(plugin, config) {
       hostPluginCalls.push({ plugin, config, name: pluginName(plugin) })
     },
   }
   const ctx = {
     root,
+    effect(register) {
+      return register()
+    },
     on(event, handler) {
       let handlers = listeners.get(event)
       if (handlers === undefined) {
@@ -310,9 +331,15 @@ try {
       createCalls.push(call)
       timeline.push(call.startMarker)
 
-      const commit = await options.setup?.(agentCtx)
-      commit?.commit?.()
-      call.setupCompleted = true
+      try {
+        const commit = await options.setup?.(agentCtx)
+        commit?.commit?.()
+        call.setupCompleted = true
+      } catch (error) {
+        call.setupError = error
+        gate?.entered.resolve(call)
+        throw error
+      }
       gate?.entered.resolve(call)
       if (gate !== undefined) await gate.release.promise
 
@@ -378,7 +405,7 @@ try {
     )
   }
 
-  function assertSuccessfulSwap(label, index, oldHandle, expectedRows, smart) {
+  function assertSuccessfulSwap(label, index, oldHandle, expectedRows, smart, forceSmart = false) {
     const creation = createCalls[index]
     const resolvedAt = timeline.indexOf(creation.resolvedMarker)
     const disposedAt = timeline.indexOf(oldHandle.marker)
@@ -392,8 +419,9 @@ try {
       channel.agentId === creation.handle?.agent.id &&
         channel.agentPreset === 'standard' &&
         creation.handle?.agent.session.header.agentPreset === 'standard' &&
-        channel.smart === smart,
-      `${channel.agentId}/${channel.agentPreset}/smart=${channel.smart}`,
+        channel.smart === smart &&
+        channel.forceSmart === forceSmart,
+      `${channel.agentId}/${channel.agentPreset}/smart=${channel.smart}/forceSmart=${channel.forceSmart}`,
     )
     check(
       `${label}: replay retains every visible transcript row`,
@@ -402,9 +430,12 @@ try {
     )
   }
 
-  const smartFile = join(testHome, '.dsh-cc', 'smart.json')
+  const smartFile = join(testHome, '.dsh-tui', 'smart.json')
   const sidecarText = () => readFileSync(smartFile, 'utf8')
   const sidecar = () => JSON.parse(sidecarText())
+  const forceSmartFile = join(testHome, '.dsh-tui', 'force-smart.json')
+  const forceSidecarText = () => readFileSync(forceSmartFile, 'utf8')
+  const forceSidecar = () => JSON.parse(forceSidecarText())
 
   const initialSession = makeSession('session-standard-0', 'standard', startedEvents(), { cwd: CWD })
   const initialAgent = makeAgent(initialSession, makeScopedContext('initial-standard'))
@@ -416,6 +447,7 @@ try {
     activity: false,
     agentPreset: 'standard',
     smart: false,
+    forceSmart: false,
     handle: initialHandle,
   })
   const originalRows = transcriptOf(channel)
@@ -471,20 +503,91 @@ try {
   const onHandle = onCreation.handle
   const onSession = onHandle.agent.session
 
+  // Enabling ForceSmart automatically replaces Smart in one fork.
+  const forceGate = gateNextCreate()
+  const switchForce = channel.switchForceSmart(true)
+  const forceCreation = await withTimeout(forceGate.entered, 'switchForceSmart(true) agents.create')
+  check(
+    'ForceSmart on: Smart handle stays active while one replacement is pending',
+    onHandle.disposeCalls === 0 && channel.smart === true && channel.forceSmart === false,
+  )
+  forceGate.release()
+  const forceResult = await switchForce
+
+  check('ForceSmart on: switchForceSmart(true) returns true', forceResult === true)
+  assertForkRequest('ForceSmart on', 1, onSession)
+  assertSuccessfulSwap('ForceSmart on', 1, onHandle, originalRows, false, true)
+  check(
+    'ForceSmart on: setup mounts exactly one ForceSmart overlay after Standard',
+    same(forceCreation.agentCtx.pluginCalls.map(call => call.name), [
+      ...(process.platform === 'win32'
+        ? []
+        : ['TerminalSessionService', 'terminal-bash', 'tool-bash-persistent']),
+      'tool-str-replace-editor',
+      'dsh-tui-force-smart-marker',
+      'dsh-tui-force-smart-bootstrap',
+    ]),
+    JSON.stringify(forceCreation.agentCtx.pluginCalls.map(call => call.name)),
+  )
+  check(
+    'ForceSmart on: both child sidecars record the mutually exclusive state',
+    sidecar().sessions?.[forceCreation.options.sessionId]?.enabled === false &&
+      forceSidecar().sessions?.[forceCreation.options.sessionId]?.enabled === true &&
+      sidecar().enabled === false &&
+      forceSidecar().enabled === true,
+  )
+  const forceHandle = forceCreation.handle
+  const forceSession = forceHandle.agent.session
+
+  // Enabling Smart again replaces ForceSmart in one fork.
+  const smartAgainGate = gateNextCreate()
+  const switchSmartAgain = channel.switchSmart(true)
+  const smartAgainCreation = await withTimeout(smartAgainGate.entered, 'second switchSmart(true) agents.create')
+  check(
+    'Smart re-enable: ForceSmart handle stays active while one replacement is pending',
+    forceHandle.disposeCalls === 0 && channel.smart === false && channel.forceSmart === true,
+  )
+  smartAgainGate.release()
+  const smartAgainResult = await switchSmartAgain
+
+  check('Smart re-enable: switchSmart(true) returns true', smartAgainResult === true)
+  assertForkRequest('Smart re-enable', 2, forceSession)
+  assertSuccessfulSwap('Smart re-enable', 2, forceHandle, originalRows, true, false)
+  check(
+    'Smart re-enable: setup contains Smart only',
+    same(smartAgainCreation.agentCtx.pluginCalls.map(call => call.name), [
+      'tool-str-replace-editor',
+      'dsh-tui-smart-marker',
+      'router-bootstrap',
+    ]),
+  )
+  check(
+    'Smart re-enable: both child sidecars reverse consistently at the session boundary',
+    sidecar().sessions?.[smartAgainCreation.options.sessionId]?.enabled === true &&
+      forceSidecar().sessions?.[smartAgainCreation.options.sessionId]?.enabled === false &&
+      sidecar().enabled === true &&
+      forceSidecar().enabled === false,
+  )
+  const smartAgainHandle = smartAgainCreation.handle
+  const smartAgainSession = smartAgainHandle.agent.session
+
   // Smart off, still Standard.
   const offGate = gateNextCreate()
   const switchOff = channel.switchSmart(false)
   const offCreation = await withTimeout(offGate.entered, 'switchSmart(false) agents.create')
   check(
     'Smart off: Smart handle stays active while create is pending',
-    onHandle.disposeCalls === 0 && channel.agentId === onHandle.agent.id && channel.smart === true,
+    smartAgainHandle.disposeCalls === 0 &&
+      channel.agentId === smartAgainHandle.agent.id &&
+      channel.smart === true &&
+      channel.forceSmart === false,
   )
   offGate.release()
   const offResult = await switchOff
 
   check('Smart off: switchSmart(false) returns true', offResult === true)
-  assertForkRequest('Smart off', 1, onSession)
-  assertSuccessfulSwap('Smart off', 1, onHandle, originalRows, false)
+  assertForkRequest('Smart off', 3, smartAgainSession)
+  assertSuccessfulSwap('Smart off', 3, smartAgainHandle, originalRows, false, false)
   check(
     'Smart off: setup mounts Standard without Smart overlay plugins',
     offCreation.agentCtx.pluginCalls.length === 0 && host.hostPluginCalls.length === 1,
@@ -509,6 +612,7 @@ try {
   const currentSession = currentHandle.agent.session
   const rowsBeforeFailure = transcriptOf(channel)
   const sidecarBeforeFailure = sidecarText()
+  const forceSidecarBeforeFailure = forceSidecarText()
   rejectNextCreate = true
   const failureGate = gateNextCreate()
   const failedSwitch = channel.switchSmart(true)
@@ -525,7 +629,7 @@ try {
   const failureResult = await failedSwitch
 
   check('create failure: switchSmart(true) returns false', failureResult === false)
-  assertForkRequest('create failure', 2, currentSession)
+  assertForkRequest('create failure', 4, currentSession)
   check(
     'create failure: factory rejected after Standard and Smart setup',
     failedCreation.setupCompleted === true &&
@@ -550,13 +654,19 @@ try {
   host.emit('agent/status', { agent: currentHandle.agent, status: 'running' })
   check('create failure: old agent status subscription remains live', channel.status === 'running')
   check(
-    'create failure: Smart sidecar is byte-for-byte unchanged and has no failed child',
-    sidecarText() === sidecarBeforeFailure && sidecar().sessions?.[failedCreation.options.sessionId] === undefined,
+    'create failure: enhancement sidecars are unchanged and contain no failed child',
+    sidecarText() === sidecarBeforeFailure &&
+      forceSidecarText() === forceSidecarBeforeFailure &&
+      sidecar().sessions?.[failedCreation.options.sessionId] === undefined &&
+      forceSidecar().sessions?.[failedCreation.options.sessionId] === undefined,
   )
   check(
     'create failure: successful predecessors were each disposed exactly once',
-    initialHandle.disposeCalls === 1 && onHandle.disposeCalls === 1,
-    `${initialHandle.disposeCalls}/${onHandle.disposeCalls}`,
+    initialHandle.disposeCalls === 1 &&
+      onHandle.disposeCalls === 1 &&
+      forceHandle.disposeCalls === 1 &&
+      smartAgainHandle.disposeCalls === 1,
+    `${initialHandle.disposeCalls}/${onHandle.disposeCalls}/${forceHandle.disposeCalls}/${smartAgainHandle.disposeCalls}`,
   )
   check(
     'create failure: error is reported without swapping',
@@ -565,8 +675,8 @@ try {
   )
   check(
     'all fork compositions resolved and mounted Standard without in-place recompose',
-    same(resolveCalls, ['standard', 'standard', 'standard']) &&
-      same(mountCalls.map(call => call.id), ['standard', 'standard', 'standard']) &&
+    same(resolveCalls, ['standard', 'standard', 'standard', 'standard', 'standard']) &&
+      same(mountCalls.map(call => call.id), ['standard', 'standard', 'standard', 'standard', 'standard']) &&
       recomposeCalls.length === 0,
     JSON.stringify({ resolveCalls, mounts: mountCalls.map(call => call.id), recomposes: recomposeCalls.length }),
   )

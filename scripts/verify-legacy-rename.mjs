@@ -67,6 +67,7 @@ check('detectLegacyEnv: reports DSH_CC_SESSION_ROOT', found.includes('DSH_CC_SES
 check('detectLegacyEnv: DSH_CC_RESUME_SESSION not reported (dual-read contract)', !found.includes('DSH_CC_RESUME_SESSION'))
 check('detectLegacyEnv: new names not reported', !found.includes('DSH_TUI_THEME'))
 check('RENAMED_ENV: CC_TUI_THEME → DSH_TUI_THEME', RENAMED_ENV.CC_TUI_THEME === 'DSH_TUI_THEME')
+check('RENAMED_ENV: CC_TUI_SMART → DSH_TUI_SMART', RENAMED_ENV.CC_TUI_SMART === 'DSH_TUI_SMART')
 check('RENAMED_ENV: DSH_CC_SESSION_ROOT → DSH_TUI_SESSION_ROOT', RENAMED_ENV.DSH_CC_SESSION_ROOT === 'DSH_TUI_SESSION_ROOT')
 check('RENAMED_ENV: every new name starts with DSH_TUI_', Object.values(RENAMED_ENV).every(name => name.startsWith('DSH_TUI_')))
 

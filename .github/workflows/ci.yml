@@ -34,6 +34,8 @@ jobs:
       - run: node scripts/verify-smart-fork.mjs
       - run: node scripts/verify-smart-request.mjs
       - run: node scripts/verify-smart-runtime.mjs
+      - run: node scripts/verify-force-smart-assets.mjs
+      - run: node scripts/verify-force-smart-state.mjs
 
       # 带断言的回归：提问面板内联输入（issue #9）+ 工具卡排版
       # （⎿ 缩进、diff 红绿行、信封剥离），失败即非零退出。
@@ -216,3 +218,5 @@ jobs:
       - run: node scripts/verify-smart-fork.mjs
       - run: node scripts/verify-smart-request.mjs
       - run: node scripts/verify-smart-runtime.mjs
+      - run: node scripts/verify-force-smart-assets.mjs
+      - run: node scripts/verify-force-smart-state.mjs

@@ -127,7 +127,7 @@ function localHeader(capture) {
   return capture.events.findLast(event => event.type === 'request/header' && event.seq >= start)
 }
 
-function assertFullHeader(label, capture) {
+function assertFullHeader(label, capture, expectedPreset = 'standard') {
   check(`${label}: adapter receives the session's effective request header`,
     capture.header !== undefined
       && capture.request.provider === capture.header.config.provider
@@ -140,7 +140,7 @@ function assertFullHeader(label, capture) {
   check(`${label}: request/header records stay outside derived messages`,
     headerEvents(capture).length > 0
       && !JSON.stringify(capture.request.messages).includes('request/header'))
-  check(`${label}: durable agentPreset remains Standard`, capture.meta.agentPreset === 'standard')
+  check(`${label}: durable agentPreset remains ${expectedPreset}`, capture.meta.agentPreset === expectedPreset)
 }
 
 function assertForkSeed(label, capture, parentId, parentEvents) {
@@ -205,6 +205,7 @@ try {
     { createChannel },
     { composePreset },
     { SMART_PROMPT_MARKER },
+    { FORCE_SMART_PROMPT_MARKER },
     { SUPER_INJECTOR_TOOL_NAMES },
   ] = await Promise.all([
     import('@deepseek-ai/cordis'),
@@ -217,10 +218,25 @@ try {
     import('../lib/types/channel.js'),
     import('../lib/types/presets.js'),
     import('../lib/types/smartPrefs.js'),
+    import('../lib/types/forceSmartPrefs.js'),
     import('../lib/types/smartRuntime.js'),
   ])
 
   const responses = [
+    textResponse('Fresh ForceSmart bootstrap response.'),
+    textResponse('Fresh ForceSmart promoted response.'),
+    textResponse('Active ForceSmart plan response.'),
+    textResponse('Active ForceSmart goal response.'),
+    textResponse('Inherited ForceSmart child response.'),
+    textResponse('Promoted ForceSmart child response.'),
+    textResponse('Fresh Smart Standard response.'),
+    textResponse('Fresh Smart Code response.'),
+    textResponse('Inherited Smart Flash child response.'),
+    textResponse('Promoted Smart Flash child response.'),
+    textResponse('Inherited Smart Pro child response.'),
+    textResponse('Promoted Smart Pro child response.'),
+    textResponse('Active plan response.'),
+    textResponse('Active goal response.'),
     toolCallResponse(CallId('smart-request-bootstrap'), 'probe', {}),
     textResponse('Bootstrap complete.'),
     textResponse('Standard response.'),
@@ -249,6 +265,7 @@ try {
           model: options.model,
           sessionId: String(options.sessionId),
           system: options.system ?? '',
+          maxTokens: options.maxTokens,
           tools: structuredClone(options.tools ?? []),
           messages: structuredClone(options.messages),
         },
@@ -271,8 +288,13 @@ try {
   })
 
   const STANDARD = { id: 'standard', trust: 'system', name: 'Standard' }
+  const CODE = { id: 'code', trust: 'system', name: 'Code' }
   const DEFAULT_SENTINEL = { id: 'default-sentinel', trust: 'system', name: 'Default sentinel' }
-  const BASE_TOOL_NAMES = ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'probe']
+  const PLATFORM_SHELL = process.platform === 'win32' ? 'pwsh' : 'bash'
+  const WORKFLOW_TOOL_NAMES = ['exit_plan_mode', 'goal', 'subagent', 'workflow']
+  const BASE_TOOL_NAMES = [
+    'read', 'write', 'edit', 'glob', 'grep', PLATFORM_SHELL, 'probe', ...WORKFLOW_TOOL_NAMES,
+  ]
   const ROUTER_TOOL_NAMES = ['dev_router_status', 'dev_router_mode', 'dev_mode_subagent']
 
   rootContext = new Context()
@@ -293,24 +315,32 @@ try {
     // A non-Standard default makes an accidental undefined preset observable.
     defaultId: 'default-sentinel',
     async list() {
-      return [DEFAULT_SENTINEL, STANDARD]
+      return [DEFAULT_SENTINEL, STANDARD, CODE]
     },
     async resolve(id = 'default-sentinel') {
       resolveCalls.push(id)
       if (id === 'standard') return STANDARD
+      if (id === 'code') return CODE
       if (id === 'default-sentinel') return DEFAULT_SENTINEL
       throw new Error(`unknown agent preset: ${id}`)
     },
     async mount(agentContext, id = 'default-sentinel') {
       mountCalls.push({ agentContext, id })
+      agentContext.systemPrompt.context({
+        name: 'runtime-policy-sentinel',
+        order: 0,
+        text: 'Runtime policy sentinel: workspace-write and approval ask.',
+      })
       if (id !== 'standard') {
         agentContext.systemPrompt.section({
           name: 'deployment:persona',
           order: 0,
-          text: 'Sentinel preset must never be mounted by a Smart replacement.',
+          text: id === 'code'
+            ? 'Code request-integration persona.'
+            : 'Sentinel preset must never be mounted by a Smart replacement.',
         })
-        agentContext.tools.register(fixtureTool('sentinel_tool'))
-        return DEFAULT_SENTINEL
+        agentContext.tools.register(fixtureTool(id === 'code' ? 'code_only' : 'sentinel_tool'))
+        return id === 'code' ? CODE : DEFAULT_SENTINEL
       }
       agentContext.systemPrompt.section({
         name: 'deployment:persona',
@@ -329,6 +359,408 @@ try {
   const adapter = new CapturingAdapter()
   rootContext.llm.registerAdapter(['request-test'], adapter)
 
+  async function directCaptureMessage(handle, stage, message) {
+    const before = adapter.captures.length
+    adapter.stage = stage
+    handle.agent.followup(message)
+    await handle.agent.whenIdle()
+    const captures = adapter.captures.slice(before).filter(capture => capture.stage === stage)
+    if (captures.length !== 1) throw new Error(`${stage}: expected one model request, captured ${captures.length}`)
+    return captures[0]
+  }
+
+  async function directCapture(handle, stage, text) {
+    return await directCaptureMessage(handle, stage, createUserMessage({
+      content: [{ type: 'text', text }],
+      source: { kind: 'user' },
+    }))
+  }
+
+  async function inheritedChild(parent, id, model, preset = 'standard') {
+    const base = await composePreset(rootContext, preset, false, false)
+    return await rootContext.agents.create({
+      sessionId: SessionId(id),
+      meta: {
+        cwd: workspace,
+        agentPreset: base.agentPreset,
+        parentSession: parent.agent.session.id,
+        origin: 'subagent',
+        delegationDepth: 1,
+      },
+      agentOptions: { provider: 'request-test', model, subagentDepth: 1 },
+      setup: base.setup,
+    })
+  }
+
+  const freshForceComposition = await composePreset(rootContext, 'standard', false, true)
+  const freshForceHandle = await rootContext.agents.create({
+    sessionId: SessionId('smart-request-fresh-force-smart'),
+    meta: { cwd: workspace, agentPreset: freshForceComposition.agentPreset },
+    agentOptions: { provider: 'request-test', model: 'deepseek-v4-pro' },
+    setup: freshForceComposition.setup,
+  })
+  const freshForce = await directCapture(
+    freshForceHandle,
+    'fresh-force-smart-bootstrap',
+    'Build a production application.',
+  )
+  assertFullHeader('Fresh Standard + ForceSmart', freshForce)
+  check('Fresh Standard + ForceSmart: system prompt is byte-aligned with Minimal',
+    freshForce.request.system === 'You are a helpful software engineer assistant.',
+    freshForce.request.system)
+  check('Fresh Standard + ForceSmart: compatible shell/editor bootstrap surface',
+    same(toolNames(freshForce), [PLATFORM_SHELL, 'str_replace_editor']),
+    toolNames(freshForce).join(', '))
+  const forceBash = freshForce.request.tools.find(tool => tool.name === 'bash')
+  const forceEditor = freshForce.request.tools.find(tool => tool.name === 'str_replace_editor')
+  check('Fresh Standard + ForceSmart: bash prompt and schema match Minimal',
+    forceBash?.description?.startsWith('Run commands in a bash shell\n')
+      && forceBash?.parameters?.command?.required === true
+      && forceBash?.parameters?.command?.description
+        === 'The bash command to run. Relative path is preferred in the command.')
+  check('Fresh Standard + ForceSmart: editor prompt and schema match Minimal',
+    forceEditor?.description?.startsWith('Custom editing tool for viewing, creating and editing files\n')
+      && same(forceEditor?.parameters?.command?.enum, ['view', 'create', 'str_replace', 'insert'])
+      && forceEditor?.parameters?.path?.required === true)
+  check('Fresh Standard + ForceSmart: bootstrap request uses the Pro-tuned 1024 budget',
+    freshForce.request.maxTokens === 1024,
+    String(freshForce.request.maxTokens))
+  check('Fresh Standard + ForceSmart: runtime policy context is isolated during bootstrap',
+    !JSON.stringify(freshForce.request.messages).includes('Runtime policy sentinel'))
+
+  const promotedForce = await directCapture(
+    freshForceHandle,
+    'fresh-force-smart-promoted',
+    'Continue with the complete workflow.',
+  )
+  assertFullHeader('Promoted Standard + ForceSmart', promotedForce)
+  check('Promoted Standard + ForceSmart: native request budget is restored',
+    promotedForce.request.maxTokens === undefined)
+  check('Promoted Standard + ForceSmart: durable marker returns after bootstrap',
+    promotedForce.request.system.includes(FORCE_SMART_PROMPT_MARKER))
+  check('Promoted Standard + ForceSmart: native policy context is restored',
+    JSON.stringify(promotedForce.request.messages).includes('Runtime policy sentinel'))
+  check('Promoted Standard + ForceSmart: goal, subagent, and workflow tools are restored',
+    WORKFLOW_TOOL_NAMES.every(name => toolNames(promotedForce).includes(name))
+      && !toolNames(promotedForce).includes('str_replace_editor'),
+    toolNames(promotedForce).join(', '))
+  await freshForceHandle.dispose()
+
+  function addWorkflowSurface(handle, label, plan = false) {
+    if (plan) {
+      handle.agent.ctx.systemPrompt.section({
+        name: 'plan:policy',
+        order: -50,
+        text: `${label} plan workflow sentinel.`,
+      })
+    }
+    handle.agent.ctx.systemPrompt.context({
+      name: `${label}-workflow-context`,
+      order: 1,
+      text: `${label} workflow context sentinel.`,
+    })
+  }
+
+  const forcePlanComposition = await composePreset(rootContext, 'standard', false, true)
+  const forcePlanHandle = await rootContext.agents.create({
+    sessionId: SessionId('smart-request-force-active-plan'),
+    meta: { cwd: workspace, agentPreset: forcePlanComposition.agentPreset },
+    agentOptions: { provider: 'request-test', model: 'deepseek-v4-pro' },
+    setup: forcePlanComposition.setup,
+  })
+  addWorkflowSurface(forcePlanHandle, 'ForceSmart active plan', true)
+  const forcePlan = await directCapture(
+    forcePlanHandle,
+    'force-smart-active-plan',
+    'Design the feature while plan mode is active.',
+  )
+  assertFullHeader('Active plan + ForceSmart', forcePlan)
+  check('Active plan + ForceSmart: plan prompt and marker survive intact',
+    forcePlan.request.system.includes('ForceSmart active plan plan workflow sentinel.')
+      && forcePlan.request.system.includes(FORCE_SMART_PROMPT_MARKER))
+  check('Active plan + ForceSmart: native budget, contexts, and workflow catalog pass through',
+    forcePlan.request.maxTokens === undefined
+      && JSON.stringify(forcePlan.request.messages).includes('ForceSmart active plan workflow context sentinel.')
+      && WORKFLOW_TOOL_NAMES.every(name => toolNames(forcePlan).includes(name))
+      && !toolNames(forcePlan).includes('str_replace_editor'),
+    toolNames(forcePlan).join(', '))
+  await forcePlanHandle.dispose()
+
+  const forceGoalComposition = await composePreset(rootContext, 'standard', false, true)
+  const forceGoalHandle = await rootContext.agents.create({
+    sessionId: SessionId('smart-request-force-active-goal'),
+    meta: { cwd: workspace, agentPreset: forceGoalComposition.agentPreset },
+    agentOptions: { provider: 'request-test', model: 'deepseek-v4-pro' },
+    setup: forceGoalComposition.setup,
+  })
+  addWorkflowSurface(forceGoalHandle, 'ForceSmart active goal')
+  forceGoalHandle.agent.session.append('goal/change', {
+    kind: 'goal/change',
+    version: 1,
+    operation: 'create',
+    goal: {
+      id: 'force-smart-request-goal',
+      revision: 1,
+      objective: 'Exercise ForceSmart goal compatibility',
+      phase: 'active',
+      maxGoalRounds: 3,
+    },
+    roundsStarted: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  const forceGoal = await directCaptureMessage(
+    forceGoalHandle,
+    'force-smart-active-goal',
+    createUserMessage({
+      content: [{ type: 'text', text: 'Continue the ForceSmart goal.' }],
+      source: {
+        kind: 'goal',
+        goalId: 'force-smart-request-goal',
+        revision: 1,
+        round: 0,
+      },
+    }),
+  )
+  assertFullHeader('Active goal + ForceSmart', forceGoal)
+  check('Active goal + ForceSmart: native budget, contexts, and workflow catalog pass through',
+    forceGoal.request.maxTokens === undefined
+      && JSON.stringify(forceGoal.request.messages).includes('ForceSmart active goal workflow context sentinel.')
+      && WORKFLOW_TOOL_NAMES.every(name => toolNames(forceGoal).includes(name))
+      && !toolNames(forceGoal).includes('str_replace_editor'),
+    toolNames(forceGoal).join(', '))
+
+  const forceChildHandle = await inheritedChild(
+    forceGoalHandle,
+    'smart-request-force-child',
+    'deepseek-v4-pro',
+  )
+  const forceChild = await directCapture(
+    forceChildHandle,
+    'force-smart-child',
+    'Inspect the delegated problem and report the result.',
+  )
+  assertFullHeader('ForceSmart inherited subagent', forceChild)
+  check('ForceSmart inherited subagent: child receives the same enhancement marker',
+    forceChild.request.system.includes(FORCE_SMART_PROMPT_MARKER))
+  check('ForceSmart inherited subagent: child never gains an enhancement-owned editor',
+    BASE_TOOL_NAMES.every(name => toolNames(forceChild).includes(name))
+      && !toolNames(forceChild).includes('str_replace_editor'),
+    toolNames(forceChild).join(', '))
+  check('ForceSmart inherited subagent: incompatible native surface fails open without a budget override',
+    forceChild.request.maxTokens === undefined,
+    String(forceChild.request.maxTokens))
+  check('ForceSmart inherited subagent: delegation policy context survives its first request',
+    JSON.stringify(forceChild.request.messages).includes('Runtime policy sentinel'))
+  const promotedForceChild = await directCapture(
+    forceChildHandle,
+    'force-smart-child-promoted',
+    'Continue with the complete delegated tool surface.',
+  )
+  check('ForceSmart inherited subagent: promotion restores native contexts and delegation tools',
+    promotedForceChild.request.maxTokens === undefined
+      && JSON.stringify(promotedForceChild.request.messages).includes('Runtime policy sentinel')
+      && WORKFLOW_TOOL_NAMES.every(name => toolNames(promotedForceChild).includes(name)),
+    toolNames(promotedForceChild).join(', '))
+  await forceChildHandle.dispose()
+  await forceGoalHandle.dispose()
+
+  const freshStandardComposition = await composePreset(rootContext, 'standard', true)
+  const freshStandardHandle = await rootContext.agents.create({
+    sessionId: SessionId('smart-request-fresh-standard'),
+    meta: { cwd: workspace, agentPreset: freshStandardComposition.agentPreset },
+    agentOptions: { provider: 'request-test', model: 'request-model' },
+    setup: freshStandardComposition.setup,
+  })
+
+  // Keep two independently composed Smart agents alive while the first inbox
+  // event is dispatched. Their Router plugins both listen through the root
+  // hook table, so this catches missing ownership gates and duplicate guidance.
+  const freshCodeComposition = await composePreset(rootContext, 'code', true)
+  const freshCodeHandle = await rootContext.agents.create({
+    sessionId: SessionId('smart-request-fresh-code'),
+    meta: { cwd: workspace, agentPreset: freshCodeComposition.agentPreset },
+    agentOptions: { provider: 'request-test', model: 'deepseek-v4-pro' },
+    setup: freshCodeComposition.setup,
+  })
+
+  const ambiguousFirstText = 'Please help me with this task.'
+  const freshStandard = await directCapture(
+    freshStandardHandle,
+    'fresh-smart-standard',
+    ambiguousFirstText,
+  )
+  assertFullHeader('Fresh Standard + Smart', freshStandard)
+  check('Fresh Standard + Smart: exact Anchored shell/editor surface',
+    same(toolNames(freshStandard), [PLATFORM_SHELL, 'str_replace_editor']),
+    toolNames(freshStandard).join(', '))
+  check('Fresh Standard + Smart: Smart marker survives first-request section filtering',
+    freshStandard.request.system.includes(SMART_PROMPT_MARKER))
+  check('Fresh Standard + Smart: runtime policy context is quarantined on the first request',
+    !JSON.stringify(freshStandard.request.messages).includes('Runtime policy sentinel'))
+  const freshStandardMessages = JSON.stringify(freshStandard.request.messages)
+  check('parallel Smart agents: target first request uses its own first inbox text',
+    freshStandardMessages.includes(ambiguousFirstText))
+  check('parallel Smart agents: weak target receives exactly one Router guidance message',
+    (freshStandardMessages.match(/Router: classify this task/g) ?? []).length === 1)
+  check('parallel Smart agents: untouched peer receives no Router guidance',
+    !JSON.stringify([
+      ...freshCodeHandle.agent.inbox.nextTurn,
+      ...freshCodeHandle.agent.inbox.nextStep,
+    ]).includes('Router: classify this task'))
+
+  const freshCode = await directCapture(
+    freshCodeHandle,
+    'fresh-smart-code',
+    'Build a new web application from scratch.',
+  )
+  assertFullHeader('Fresh Code + Smart', freshCode, 'code')
+  check('Suite issue #13: real first inbox text selects REACT before user/message persistence',
+    freshCode.request.system.includes('hands-on software engineer who delivers working output fast'))
+  check('Fresh Code + Smart: non-Standard native tool and runtime context remain available',
+    toolNames(freshCode).includes('code_only')
+      && JSON.stringify(freshCode.request.messages).includes('Runtime policy sentinel'))
+  check('Suite issue #13: clear build input receives no weak near-field guidance',
+    !JSON.stringify(freshCode.request.messages).includes('Router: classify this task'))
+
+  const smartFlashChildHandle = await inheritedChild(
+    freshStandardHandle,
+    'smart-request-smart-flash-child',
+    'deepseek-v4-flash',
+  )
+  const smartFlashChild = await directCapture(
+    smartFlashChildHandle,
+    'smart-flash-child',
+    'Please investigate this delegated task.',
+  )
+  assertFullHeader('Smart inherited Flash subagent', smartFlashChild)
+  check('Smart inherited Flash subagent: child receives the Smart marker',
+    smartFlashChild.request.system.includes(SMART_PROMPT_MARKER))
+  check('Smart inherited Flash subagent: missing native editor fails open without expanding child tools',
+    BASE_TOOL_NAMES.every(name => toolNames(smartFlashChild).includes(name))
+      && !toolNames(smartFlashChild).includes('str_replace_editor'))
+  const promotedSmartFlashChild = await directCapture(
+    smartFlashChildHandle,
+    'smart-flash-child-promoted',
+    'Continue the delegated task with the complete tool surface.',
+  )
+  check('Smart inherited Flash subagent: promotion restores host, workflow, and context surfaces',
+    toolNames(promotedSmartFlashChild).includes('dev_smart_status')
+      && WORKFLOW_TOOL_NAMES.every(name => toolNames(promotedSmartFlashChild).includes(name))
+      && JSON.stringify(promotedSmartFlashChild.request.messages).includes('Runtime policy sentinel'),
+    toolNames(promotedSmartFlashChild).join(', '))
+
+  const smartProChildHandle = await inheritedChild(
+    freshStandardHandle,
+    'smart-request-smart-pro-child',
+    'deepseek-v4-pro',
+  )
+  const smartProChild = await directCapture(
+    smartProChildHandle,
+    'smart-pro-child',
+    'Build a new delegated web application.',
+  )
+  assertFullHeader('Smart inherited Pro subagent', smartProChild)
+  check('Smart inherited Pro subagent: build classification adds decision-closure guidance without replacing child persona',
+    JSON.stringify(smartProChild.request.messages).includes('Work directly. End each reasoning block')
+      && smartProChild.request.system.includes('Standard request-integration persona.'))
+  check('Smart inherited Pro subagent: build classification selects shell plus write-first tools',
+    [PLATFORM_SHELL, 'read', 'write', 'edit'].every(name => toolNames(smartProChild).includes(name))
+      && !toolNames(smartProChild).includes('str_replace_editor'),
+    toolNames(smartProChild).join(', '))
+  check('Smart inherited Pro subagent: Smart never imposes a ForceSmart output cap',
+    smartProChild.request.maxTokens === undefined)
+  check('Smart inherited Pro subagent: delegation policy context survives the routed first request',
+    JSON.stringify(smartProChild.request.messages).includes('Runtime policy sentinel'))
+  const promotedSmartProChild = await directCapture(
+    smartProChildHandle,
+    'smart-pro-child-promoted',
+    'Continue the delegated build with all tools.',
+  )
+  check('Smart inherited Pro subagent: promotion restores complete workflow and context surfaces',
+    WORKFLOW_TOOL_NAMES.every(name => toolNames(promotedSmartProChild).includes(name))
+      && JSON.stringify(promotedSmartProChild.request.messages).includes('Runtime policy sentinel'),
+    toolNames(promotedSmartProChild).join(', '))
+
+  await smartFlashChildHandle.dispose()
+  await smartProChildHandle.dispose()
+  await freshStandardHandle.dispose()
+  await freshCodeHandle.dispose()
+
+  const planComposition = await composePreset(rootContext, 'standard', true)
+  const planHandle = await rootContext.agents.create({
+    sessionId: SessionId('smart-request-active-plan'),
+    meta: { cwd: workspace, agentPreset: planComposition.agentPreset },
+    agentOptions: { provider: 'request-test', model: 'deepseek-v4-pro' },
+    setup: planComposition.setup,
+  })
+  addWorkflowSurface(planHandle, 'Active plan', true)
+  planHandle.agent.session.append('plan/mode', { active: true })
+  const activePlan = await directCapture(
+    planHandle,
+    'active-plan',
+    'Build the feature while plan mode is active.',
+  )
+  assertFullHeader('Active plan + Smart', activePlan)
+  check('Active plan + Smart: complete plan and Smart sections survive anchoring',
+    activePlan.request.system.includes('Active plan plan workflow sentinel.')
+      && activePlan.request.system.includes(SMART_PROMPT_MARKER))
+  check('Active plan + Smart: exit, goal, subagent, and workflow tools remain available',
+    WORKFLOW_TOOL_NAMES.every(name => toolNames(activePlan).includes(name)),
+    toolNames(activePlan).join(', '))
+  check('Active plan + Smart: workflow runtime context remains available',
+    JSON.stringify(activePlan.request.messages).includes('Active plan workflow context sentinel.'))
+  check('Active plan + Smart: Pro routing adds no execute-now guidance',
+    !/Work directly|Then act|Router: classify this task/.test(JSON.stringify(activePlan.request.messages)))
+  await planHandle.dispose()
+
+  const goalComposition = await composePreset(rootContext, 'standard', true)
+  const goalHandle = await rootContext.agents.create({
+    sessionId: SessionId('smart-request-active-goal'),
+    meta: { cwd: workspace, agentPreset: goalComposition.agentPreset },
+    agentOptions: { provider: 'request-test', model: 'request-model' },
+    setup: goalComposition.setup,
+  })
+  addWorkflowSurface(goalHandle, 'Active goal')
+  const activeGoal = await directCaptureMessage(
+    goalHandle,
+    'active-goal',
+    createUserMessage({
+      content: [{ type: 'text', text: 'Continue the active goal workflow.' }],
+      source: {
+        kind: 'goal',
+        goalId: 'smart-request-goal',
+        revision: 1,
+        round: 0,
+        change: {
+          kind: 'goal/change',
+          version: 1,
+          operation: 'create',
+          goal: {
+            id: 'smart-request-goal',
+            revision: 1,
+            objective: 'Complete the request integration fixture',
+            phase: 'active',
+            maxGoalRounds: 3,
+          },
+          roundsStarted: 0,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    }),
+  )
+  assertFullHeader('Active goal + Smart', activeGoal)
+  check('Active goal + Smart: complete Standard and Smart sections survive anchoring',
+    activeGoal.request.system.includes('Standard request-integration persona.')
+      && activeGoal.request.system.includes(SMART_PROMPT_MARKER))
+  check('Active goal + Smart: exit, goal, subagent, and workflow tools remain available',
+    WORKFLOW_TOOL_NAMES.every(name => toolNames(activeGoal).includes(name)),
+    toolNames(activeGoal).join(', '))
+  check('Active goal + Smart: workflow runtime context remains available',
+    JSON.stringify(activeGoal.request.messages).includes('Active goal workflow context sentinel.'))
+  await goalHandle.dispose()
+
   const initialComposition = await composePreset(rootContext, 'standard', false)
   const initialHandle = await rootContext.agents.create({
     sessionId: SessionId('smart-request-standard'),
@@ -345,6 +777,7 @@ try {
   // Prime one real durable tool/call so Router Standard is in its promoted
   // catalog state. The three captures under test then remain one model request
   // each while still proving the Router management tools are assembled.
+  adapter.stage = 'bootstrap'
   initialHandle.agent.followup(createUserMessage({
     content: [{ type: 'text', text: 'Create the bootstrap fixture.' }],
     source: { kind: 'user' },
@@ -434,6 +867,8 @@ try {
     [...BASE_TOOL_NAMES, 'epoch_probe'].every(name => smartTools.includes(name)))
   check('Smart on: Router v0.2 Standard interface adds str_replace_editor',
     smartTools.includes('str_replace_editor'))
+  check('Smart on: inherited tool-call history starts promoted and restores runtime policy context',
+    JSON.stringify(smart.request.messages).includes('Runtime policy sentinel'))
   check('Smart on: optional host management surface and status tool are visible',
     SUPER_INJECTOR_TOOL_NAMES.every(name => smartTools.includes(name))
       && smartTools.includes('dev_smart_status'))
@@ -501,13 +936,17 @@ try {
       capture.request.provider === 'request-test' && capture.request.model === 'request-model'))
   check('Smart transitions never use preset recompose', recomposeCalls.length === 0)
   check('every composition resolves the source preset explicitly',
-    same(resolveCalls, ['standard', 'standard', 'standard', 'standard']),
+    resolveCalls.length === 14
+      && resolveCalls.filter(id => id === 'standard').length === 13
+      && resolveCalls.filter(id => id === 'code').length === 1,
     resolveCalls.join(', '))
   check('base Standard mount runs once per agent and never falls back to the roster default',
-    mountCalls.length === 4 && mountCalls.every(call => call.id === 'standard'),
+    mountCalls.length === 14
+      && mountCalls.filter(call => call.id === 'standard').length === 13
+      && mountCalls.filter(call => call.id === 'code').length === 1,
     mountCalls.map(call => call.id).join(', '))
   check('Smart preference writes are isolated under the temporary HOME',
-    existsSync(join(testHome, '.dsh-cc', 'smart.json')))
+    existsSync(join(testHome, '.dsh-tui', 'smart.json')))
   check('adapter consumed the exact scripted request count', responses.length === 0)
 } catch (error) {
   failed += 1

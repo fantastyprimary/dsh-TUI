@@ -7,24 +7,45 @@
         "suite": {
           "name": "dsh-routing-suite",
           "url": "https://github.com/yjh051108/dsh-routing-suite",
-          "sha": "7cb30de523c77040415e2774a5c0dc898f626cc5"
+          "sha": "eb1b00da039df34c0ab6012b2c93aadc28de391c"
         },
         "router": {
           "name": "dsh-router-standard",
           "url": "https://github.com/yjh051108/dsh-router-standard",
-          "sha": "9cacc362abc0b92fe3aaf574739d5c565fe87249",
-          "tag": "v0.2.0",
+          "sha": "7426c9cebc0999961aa6197eb42461d92a3ac3ee",
+          "tag": "v0.3.0",
+          "tagObservedAtSha": "7426c9cebc0999961aa6197eb42461d92a3ac3ee",
+          "tagMutable": false,
           "license": "MIT",
-          "sourceDirectory": "preset",
+          "sourceDirectory": "preset/router-standard",
+          "policySourceDirectories": [
+            "preset/router-standard",
+            "preset/router-pro"
+          ],
           "vendored": true,
           "files": {
             "LICENSE": "d627bff3c07a46d2bbff6bff78e97d92aa512940e46fc4adbd790b628c1bcfa5",
-            "NOTICE": "c09925dbc13234297f56db762dd2fb014ef9ca2a9a509f95118f3432307f2b88",
-            "agent.cordis.yml": "fba87401359ece7706dbb0a5ad5888e5aa9f1808c418f472be9237769c3e0b6a",
-            "preset.yml": "cc11ef00051140df8cf5e31c647d1107f9818b41c72162354e0840a5cdad7329",
-            "router-bootstrap.mjs": "8cb96ff6079375e313c8374075d740d4cc9aae2e852fdaa4760657ca1866596e",
-            "router-core.mjs": "70c958b0f532ba10cfdabdfeb3763d4941ed25735ee1846dd6fcb4cae7d3b4df"
+            "NOTICE": "9a7d4ac0d3ddc1fb0898c54d9cd3274e01d5bee77d7100f59a3f4ef8dfa7b1e4",
+            "agent.cordis.yml": "ade057831fa1b9297f8cb41a00b0bb96b9467d4909aeb90f91d8a55a40c058b1",
+            "preset.yml": "335c8e7d7cc42b1f7a5e3fbe4be35fa89998b297728398bb37074923622fd769",
+            "router-bootstrap.mjs": "a64ef30346cbd73cabe4c92598794ac70c3842184815f907c0033483022fd03e",
+            "router-bootstrap-v1.mjs": "e7893187d6d44389e6fe0b0911a9fdf61e90b4614ccab5e1651a2f5d404e7f53",
+            "router-core.mjs": "b2c3851f099d174e0b3e3cfe6a10f52a5f3299c8bb419473e2f7388c45ae1416"
           }
+        },
+        "modeBoost": {
+          "name": "dsh-mode-boost",
+          "url": "https://github.com/yjh051108/dsh-mode-boost",
+          "sha": "a9a666a6ec83ae72c6f683300384554e41131880",
+          "tag": "v0.1.0",
+          "license": {
+            "declared": "MIT",
+            "declaredIn": "package.json",
+            "licenseFilePresent": false,
+            "noticeFilePresent": false
+          },
+          "vendored": false,
+          "reason": "The suite component overlaps Router guidance and currently observes the first request too late, clears promoted contexts, and throws for shell-less children. Smart records the source but does not double-mount it."
         },
         "injector": {
           "name": "dsh-super-injector",
@@ -45,32 +66,73 @@
       },
       "localPatches": [
         {
-          "file": "router-standard/router-bootstrap.mjs",
-          "type": "import",
-          "symbols": [
-            "bandOf",
-            "extractText"
-          ],
-          "reason": "The pinned router calls both symbols in its weak-mode session/event listener without importing them from router-core.mjs."
+          "file": "router-standard/agent.cordis.yml",
+          "type": "whitespace-normalization",
+          "reason": "The vendored YAML drops an extra blank line at EOF so repository whitespace checks remain deterministic. Its parsed configuration is unchanged."
         },
         {
-          "file": "router-standard/router-bootstrap.mjs",
+          "file": "router-standard/router-bootstrap-v1.mjs",
+          "type": "single-adapter",
+          "reason": "Smart uses one lifecycle adapter rather than double-mounting Router Standard and Router Pro. It selects the Pro policy only for an explicit DeepSeek V4 Pro model and keeps Router Standard for Flash and unknown routes."
+        },
+        {
+          "file": "router-standard/preset.yml",
+          "type": "yaml-metadata",
+          "reason": "The upstream plain-scalar description contains a colon followed by a space and fails js-yaml parsing. Smart quotes the metadata strings so the DSH preset reader returns the intended name and description."
+        },
+        {
+          "file": "router-standard/router-bootstrap-v1.mjs",
           "type": "first-request-classification",
-          "reason": "The pinned v0.2.0 caches raw first-user text but passes it directly as a numeric mode. Smart classifies the cached text with classifyTask() before selecting the first-request band."
+          "reason": "The v0.3.0 Router Pro bootstrap still caches raw first-user text and passes it directly as a numeric mode. Smart classifies the cached text before selecting the first-request band."
         },
         {
-          "file": "router-standard/router-bootstrap.mjs",
+          "file": "router-standard/router-bootstrap-v1.mjs",
           "type": "preset-overlay",
-          "reason": "Router Standard v0.2.0's RL prompt/context and tool narrowing apply only over the standard base preset, where dsh-TUI also mounts str_replace_editor. code, minimal, cordis, and user presets keep native context and complete tool catalogs while Smart still applies task classification, persona, guidance, and router tools."
+          "reason": "Router Standard/Pro first-request tool narrowing applies only over the standard base preset. code, minimal, cordis, and user presets keep native contexts and catalogs while Smart still applies non-destructive classification guidance."
+        },
+        {
+          "file": "router-standard/router-bootstrap-v1.mjs",
+          "type": "root-inbox-lifecycle",
+          "reason": "rc.6 does not deliver Agent events to a standing scoped session/event listener. Smart captures real user input through lifecycle-managed root agent/inbox/inserted, binds it to the owning agent, and ignores plugin messages to prevent duplicate or recursive guidance."
+        },
+        {
+          "file": "router-standard/router-bootstrap-v1.mjs",
+          "type": "workflow-guidance-isolation",
+          "reason": "Active plan and goal drivers keep sole ownership of next-step policy. Smart still records the real user text for routing but does not append execute-now or classification guidance while either workflow is active."
+        },
+        {
+          "file": "router-standard/router-bootstrap-v1.mjs",
+          "type": "promotion-context-restore",
+          "reason": "Only a genuinely fresh Standard first request uses the Anchored surface. A durable tool call, a completed or tool-less response, or inherited fork history restores the base preset's complete sections, contexts, and tool catalog from persisted session state."
+        },
+        {
+          "file": "router-standard/router-bootstrap-v1.mjs",
+          "type": "shell-less-child-compat",
+          "reason": "A scoped child lacking any required core tool passes through unchanged instead of crashing or gaining capabilities. Delegated persona and policy contexts are preserved; Smart never registers enhancement-owned tools into child scope."
+        },
+        {
+          "file": "router-standard/router-core.mjs",
+          "type": "router-pro-policy",
+          "reason": "The volatile policy core is adapted from v0.3.0 router-pro, adds explicit DeepSeek V4 Pro detection, and remains behind Smart's local lifecycle adapter. Smart does not add a Router Pro roster entry."
         }
       ],
       "upstreamReview": {
         "reviewedAt": "2026-08-16",
         "decisions": [
           {
+            "ref": "dsh-routing-suite#13",
+            "decision": "patched",
+            "reason": "Smart captures the real first user inbox insertion before prompt assembly and classifies that text instead of waiting for user/message persistence."
+          },
+          {
+            "ref": "dsh-routing-suite#12",
+            "decision": "covered-with-boundary",
+            "reason": "Non-Standard and custom bases keep their native skills, contexts, and tools. Standard deliberately uses the Router Standard RL surface until its first durable tool call, then restores the full catalog and runtime contexts."
+          },
+          {
             "ref": "dsh-routing-suite#11",
             "decision": "patched",
-            "reason": "The v0.2.0 bootstrap still calls bandOf and extractText without importing them."
+            "reason": "The v0.3.0 Router Pro bootstrap still omits bandOf/extractText imports; Smart's single adapter imports every referenced symbol explicitly."
           },
           {
             "ref": "dsh-routing-suite#6",
@@ -86,6 +148,51 @@
             "ref": "dsh-routing-suite#1",
             "decision": "documented-limitation",
             "reason": "The TUI compatibility host does not expose the upstream browser settings panel."
+          },
+          {
+            "ref": "dsh-router-standard#11",
+            "decision": "patched",
+            "reason": "The vendored preset metadata quotes the description containing a colon-space sequence so js-yaml can parse it deterministically."
+          },
+          {
+            "ref": "dsh-router-standard#10",
+            "decision": "patched",
+            "reason": "Near-field guidance and first-message capture use the root agent/inbox/inserted event with scoped lifecycle disposal."
+          },
+          {
+            "ref": "dsh-router-standard#8",
+            "decision": "patched",
+            "reason": "Promoted Standard requests preserve the assembled runtime contexts."
+          },
+          {
+            "ref": "dsh-router-standard#7",
+            "decision": "patched",
+            "reason": "Promoted Standard requests preserve file and approval policy contexts instead of returning contexts: []."
+          },
+          {
+            "ref": "dsh-router-standard#6",
+            "decision": "patched",
+            "reason": "The latest source includes bandOf; the still-missing extractText import is explicit in Smart's vendored module."
+          },
+          {
+            "ref": "dsh-router-standard#5",
+            "decision": "patched-for-tui",
+            "reason": "Shell-less scoped child assemblies pass through unchanged; parentSession itself is not excluded because dsh-TUI replacement sessions use the same lineage field."
+          },
+          {
+            "ref": "dsh-router-standard#9",
+            "decision": "patched-by-lifecycle",
+            "reason": "dsh-TUI model switches create one replacement Agent with the selected route in agent.options, so Smart reselects Standard versus Pro before that Agent's first request."
+          },
+          {
+            "ref": "dsh-router-standard#2",
+            "decision": "documented-limitation",
+            "reason": "dev_mode_subagent is a text-only advisory call with no tool catalog and a bounded output budget; it is not represented as an executable worker."
+          },
+          {
+            "ref": "dsh-mode-boost@a9a666a",
+            "decision": "excluded-as-overlap",
+            "reason": "Smart already owns the routing lifecycle. The component is not double-mounted because its first-message, promoted-context, and shell-less-child behavior conflicts with dsh-TUI's verified boundaries."
           }
         ]
       }

@@ -53,6 +53,14 @@ const dict = {
   'smart-switched-pref-failed': { zh: 'Smart 已切换为 {{state}}，但状态偏好未完整保存', en: 'Smart switched {{state}}, but its state preference was not fully saved' },
   'smart-current': { zh: 'Smart 增强  {{state}}', en: 'Smart enhancement  {{state}}' },
   'smart-usage': { zh: '用法：/smart [on|off|status]', en: 'Usage: /smart [on|off|status]' },
+  'force-smart-agent-running': { zh: 'Agent 运行中，无法切换 ForceSmart', en: 'Agent is running; ForceSmart cannot be switched' },
+  'force-smart-unavailable': { zh: 'ForceSmart 切换不可用——会话 fork 服务未挂载', en: 'ForceSmart switch unavailable — session fork services are not loaded' },
+  'force-smart-switch-failed': { zh: 'ForceSmart 切换失败 · {{err}}', en: 'ForceSmart switch failed · {{err}}' },
+  'force-smart-already': { zh: 'ForceSmart 已经是 {{state}}', en: 'ForceSmart is already {{state}}' },
+  'force-smart-switched': { zh: 'ForceSmart 已切换为 {{state}}（对话已保留并保存为默认）', en: 'ForceSmart switched {{state}} (conversation preserved and saved as default)' },
+  'force-smart-switched-pref-failed': { zh: 'ForceSmart 已切换为 {{state}}，但状态偏好未完整保存', en: 'ForceSmart switched {{state}}, but its state preference was not fully saved' },
+  'force-smart-current': { zh: 'ForceSmart 增强  {{state}}', en: 'ForceSmart enhancement  {{state}}' },
+  'force-smart-usage': { zh: '用法：/force-smart [on|off|status]', en: 'Usage: /force-smart [on|off|status]' },
   'mcp-none-configured': { zh: '未配置 MCP 服务器。', en: 'No MCP servers configured.' },
   'mcp-insert-hint': { zh: '在 profile 补丁层（~/.dsh/profiles/dsh-tui/cordis.patch.yml）insert 一行即可，例：', en: 'Insert one line in the profile patch layer (~/.dsh/profiles/dsh-tui/cordis.patch.yml), e.g.:' },
   'mcp-readme-hint': { zh: '详见仓库 README 的 MCP 章节。', en: 'See the MCP section of the repo README.' },
@@ -200,7 +208,7 @@ const dict = {
   'btw-llm-unavailable': { zh: '侧问不可用（llm 服务未挂载）', en: 'Side question unavailable (llm service not mounted)' },
 
   // ── plugin.ts — boot-time rename notices (issue #120) ───────────────
-  'legacy-dir-migrated': { zh: '数据目录已从 ~/.dsh-tui 复制到 ~/.dsh-tui（旧目录保留，确认无误后可自行删除）', en: 'Data directory copied from ~/.dsh-tui to ~/.dsh-tui (the old directory is kept; delete it yourself once satisfied)' },
+  'legacy-dir-migrated': { zh: '数据目录已从 ~/.dsh-cc 复制到 ~/.dsh-tui（旧目录保留，确认无误后可自行删除）', en: 'Data directory copied from ~/.dsh-cc to ~/.dsh-tui (the old directory is kept; delete it yourself once satisfied)' },
   'legacy-env-renamed': { zh: '环境变量 {{old}} 已更名为 {{new}}，旧名不再生效', en: 'Environment variable {{old}} was renamed to {{new}}; the old name no longer takes effect' },
 
   // ── components/ActivityLine.tsx ──────────────────────────────────────
@@ -465,6 +473,7 @@ const dict = {
   'cmd-desc-activity': { zh: '切换工作状态指示器预设' },
   'cmd-desc-preset': { zh: '切换 Agent 预设（standard/code/minimal/cordis）' },
   'cmd-desc-smart': { zh: '在当前 Agent 预设上切换 Smart 路由增强' },
+  'cmd-desc-force-smart': { zh: '在当前 Agent 预设上切换 ForceSmart 锚定增强' },
   'cmd-desc-theme': { zh: '切换配色主题（auto 跟随系统，或内置/自定义）' },
   'cmd-desc-lang': { zh: '切换界面语言（en / zh）' },
   'cmd-desc-model': { zh: '查看当前模型' },

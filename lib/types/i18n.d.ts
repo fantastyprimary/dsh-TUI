@@ -115,6 +115,38 @@ declare const dict: {
         readonly zh: "用法：/smart [on|off|status]";
         readonly en: "Usage: /smart [on|off|status]";
     };
+    readonly 'force-smart-agent-running': {
+        readonly zh: "Agent 运行中，无法切换 ForceSmart";
+        readonly en: "Agent is running; ForceSmart cannot be switched";
+    };
+    readonly 'force-smart-unavailable': {
+        readonly zh: "ForceSmart 切换不可用——会话 fork 服务未挂载";
+        readonly en: "ForceSmart switch unavailable — session fork services are not loaded";
+    };
+    readonly 'force-smart-switch-failed': {
+        readonly zh: "ForceSmart 切换失败 · {{err}}";
+        readonly en: "ForceSmart switch failed · {{err}}";
+    };
+    readonly 'force-smart-already': {
+        readonly zh: "ForceSmart 已经是 {{state}}";
+        readonly en: "ForceSmart is already {{state}}";
+    };
+    readonly 'force-smart-switched': {
+        readonly zh: "ForceSmart 已切换为 {{state}}（对话已保留并保存为默认）";
+        readonly en: "ForceSmart switched {{state}} (conversation preserved and saved as default)";
+    };
+    readonly 'force-smart-switched-pref-failed': {
+        readonly zh: "ForceSmart 已切换为 {{state}}，但状态偏好未完整保存";
+        readonly en: "ForceSmart switched {{state}}, but its state preference was not fully saved";
+    };
+    readonly 'force-smart-current': {
+        readonly zh: "ForceSmart 增强  {{state}}";
+        readonly en: "ForceSmart enhancement  {{state}}";
+    };
+    readonly 'force-smart-usage': {
+        readonly zh: "用法：/force-smart [on|off|status]";
+        readonly en: "Usage: /force-smart [on|off|status]";
+    };
     readonly 'mcp-none-configured': {
         readonly zh: "未配置 MCP 服务器。";
         readonly en: "No MCP servers configured.";
@@ -664,8 +696,8 @@ declare const dict: {
         readonly en: "Side question unavailable (llm service not mounted)";
     };
     readonly 'legacy-dir-migrated': {
-        readonly zh: "数据目录已从 ~/.dsh-tui 复制到 ~/.dsh-tui（旧目录保留，确认无误后可自行删除）";
-        readonly en: "Data directory copied from ~/.dsh-tui to ~/.dsh-tui (the old directory is kept; delete it yourself once satisfied)";
+        readonly zh: "数据目录已从 ~/.dsh-cc 复制到 ~/.dsh-tui（旧目录保留，确认无误后可自行删除）";
+        readonly en: "Data directory copied from ~/.dsh-cc to ~/.dsh-tui (the old directory is kept; delete it yourself once satisfied)";
     };
     readonly 'legacy-env-renamed': {
         readonly zh: "环境变量 {{old}} 已更名为 {{new}}，旧名不再生效";
@@ -1484,6 +1516,9 @@ declare const dict: {
     };
     readonly 'cmd-desc-smart': {
         readonly zh: "在当前 Agent 预设上切换 Smart 路由增强";
+    };
+    readonly 'cmd-desc-force-smart': {
+        readonly zh: "在当前 Agent 预设上切换 ForceSmart 锚定增强";
     };
     readonly 'cmd-desc-theme': {
         readonly zh: "切换配色主题（auto 跟随系统，或内置/自定义）";

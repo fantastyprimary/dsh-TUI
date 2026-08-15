@@ -149,6 +149,7 @@ function makeRuntimeContext({ services: initialServices = {} } = {}) {
       },
     },
   }
+  ctx.root = ctx
   return { ctx, listeners, services, state }
 }
 

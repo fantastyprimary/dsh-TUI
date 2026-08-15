@@ -14,7 +14,9 @@ import { homedir } from 'node:os'
 import { dirname, extname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { enhancementOf } from './enhancementInheritance.js'
 import { resolveDshProfileName } from './update.js'
 import { smartModeOf } from './smartPrefs.js'
 
@@ -153,7 +155,7 @@ export async function apply(ctx: Context): Promise<void> {
     async execute() {
       return [
         'mode=smart',
-        'router=dsh-router-standard v0.2.0',
+        'router=dsh-router-standard v0.3.0 (Flash=standard, V4 Pro=pro)',
         `host=${status.phase}: ${status.detail}`,
         ...(status.source === undefined ? [] : [`source=${status.source}`]),
         'browser-ui=unavailable in the terminal profile',
@@ -166,7 +168,8 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
     const assembled = await next()
     const agent = context.agent
-    if (agent !== undefined && smartModeOf(agent.session)) return assembled
+    if (agent !== undefined
+      && (enhancementOf(ctx, agent as Agent) === 'smart' || smartModeOf(agent.session))) return assembled
     return {
       ...assembled,
       contexts: assembled.contexts.filter(entry => !smartContexts.has(entry.name)),

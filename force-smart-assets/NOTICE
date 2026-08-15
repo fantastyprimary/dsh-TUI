@@ -1,0 +1,18 @@
+ForceSmart's two-phase anchor controller is adapted from:
+
+- xiaobright/dsh-anchored-standard at
+  d97bec91a3d668f4cf1d03ee5f20aae84fb6f85c (MIT)
+- zhu1090093659/dsh-web-ui packages/dsh-liangshen at
+  3647a33fa467e0335260468614f6eed04b196c38 (Apache-2.0 package;
+  its tool-bootstrap.mjs is attributed to dsh-anchored-standard under MIT)
+
+The dsh-TUI adaptation keeps base preset, plan/goal policy, fork lineage, and
+restricted child-agent behavior separate from the original standalone preset.
+Its clean first request uses the official Minimal persona plus model-facing
+Bash/editor prompts and schemas. Execution reuses compatible base-preset tools
+where possible and may mount the official DSH implementations only for a
+top-level agent; child scopes never gain tools. The pinned Anchored main has no
+default output cap, while ForceSmart deliberately keeps the fixed reference
+composition's 1024 bootstrap budget and trajectory gate.
+These implementation sources are attribution and design references only; the
+product, command, and UI name is ForceSmart.

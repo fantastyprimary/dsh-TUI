@@ -458,6 +458,25 @@ export function Chat({
         void channel.switchSmart(enabled)
         return true
       }
+      case 'force-smart': {
+        const input = rawInput.trim().toLowerCase()
+        if (input === 'status') {
+          setHelpOpen(false)
+          channel.pushLocal('/force-smart', [
+            t('force-smart-current', { state: channel.forceSmart ? 'on' : 'off' }),
+            t('force-smart-usage'),
+          ])
+          return true
+        }
+        if (input !== '' && input !== 'on' && input !== 'off') {
+          channel.notify(t('force-smart-usage'), { color: 'warning' })
+          return true
+        }
+        setHelpOpen(false)
+        const enabled = input === '' ? !channel.forceSmart : input === 'on'
+        void channel.switchForceSmart(enabled)
+        return true
+      }
       case 'effort': {
         // Bare `/effort` opens the rheostat slider over the live route's
         // adapter levels (←/→ applies each step immediately); `/effort <id>`
@@ -706,7 +725,7 @@ export function Chat({
           `${t('status-model', { model: channel.model })}${channel.reasoningEffort ? ` · ${capitalize(channel.reasoningEffort)} effort` : ''}`,
           `${t('status-state', { state: channel.working ? t('status-working') : t('status-idle') })}`,
           `${t('status-session', { id: channel.agentId })}`,
-          `Preset ${channel.agentPreset ?? 'host'} · Smart ${channel.smart ? 'on' : 'off'}`,
+          `Preset ${channel.agentPreset ?? 'host'} · Smart ${channel.smart ? 'on' : 'off'} · ForceSmart ${channel.forceSmart ? 'on' : 'off'}`,
           `${t('status-dir', { cwd: channel.cwd })}${channel.gitBranch ? ` · ${channel.gitBranch}` : ''}`,
           `Tokens ${formatTokens(channel.tokens.input)} in → ${formatTokens(channel.tokens.output)} out`,
         ]

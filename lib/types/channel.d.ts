@@ -397,6 +397,8 @@ export interface Channel {
     /** Whether the orthogonal Smart routing-suite enhancement is active over
      *  the current official preset. */
     readonly smart: boolean;
+    /** Whether the mutually exclusive ForceSmart Anchored enhancement is active. */
+    readonly forceSmart: boolean;
     /** The roster's presets for the `/preset` picker (empty without a roster). */
     listPresets(): Promise<readonly PresetOption[]>;
     /** Switch the agent preset (`/preset`): a blank session swaps composition
@@ -407,6 +409,8 @@ export interface Channel {
     switchPreset(presetId: string): Promise<boolean>;
     /** Toggle Smart by forking the conversation into a fully recomposed agent. */
     switchSmart(enabled?: boolean): Promise<boolean>;
+    /** Toggle ForceSmart by forking into a fully recomposed agent. */
+    switchForceSmart(enabled?: boolean): Promise<boolean>;
     /** Reset the visible transcript (`/clear`). */
     clear(): void;
     /**
@@ -617,12 +621,16 @@ export interface ChannelState {
     agentPreset: string | undefined;
     /** Smart enhancement state (see the public Channel type). */
     smart: boolean;
+    /** ForceSmart enhancement state (see the public Channel type). */
+    forceSmart: boolean;
     /** The roster's presets for the `/preset` picker (see the public Channel type). */
     listPresets(): Promise<readonly PresetOption[]>;
     /** Switch the agent preset (see the public Channel type). */
     switchPreset(presetId: string): Promise<boolean>;
     /** Toggle Smart (see the public Channel type). */
     switchSmart(enabled?: boolean): Promise<boolean>;
+    /** Toggle ForceSmart (see the public Channel type). */
+    switchForceSmart(enabled?: boolean): Promise<boolean>;
     clear(): void;
     /** @internal older-row restoration (see the public Channel.loadOlder). */
     loadOlder(): number;
@@ -704,6 +712,10 @@ export declare function createChannel(ctx: Context, initialAgent: Agent, options
      *  that wins over the persisted default for new sessions. */
     smart?: boolean;
     configuredSmart?: boolean;
+    /** ForceSmart state and optional static config pin. Smart and ForceSmart
+     *  are mutually exclusive; ForceSmart wins an invalid dual startup. */
+    forceSmart?: boolean;
+    configuredForceSmart?: boolean;
     /** Shift+Tab session-mode cycle from cordis.yml `modes`; undefined →
      *  the built-in default/plan/full cycle (sessionModes.ts). */
     modes?: readonly SessionModeSpec[];

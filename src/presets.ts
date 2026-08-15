@@ -21,6 +21,7 @@ import type { AgentSetup } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
 import { mountSmartEnhancement } from './smartEnhancement.js'
+import { mountForceSmartEnhancement } from './forceSmartEnhancement.js'
 
 /** One roster entry, as returned by `agentPresets.list()`/`resolve()`. */
 export interface AgentPresetInfo {
@@ -72,12 +73,18 @@ export interface PresetComposition {
  * @param requested - The preset id the caller wants, or undefined for the default.
  * @returns The header value + setup hook, or an empty composition.
  */
-export async function composePreset(ctx: Context, requested?: string, smart = false): Promise<PresetComposition> {
+export async function composePreset(
+  ctx: Context,
+  requested?: string,
+  smart = false,
+  forceSmart = false,
+): Promise<PresetComposition> {
+  if (smart && forceSmart) throw new Error('Smart and ForceSmart are mutually exclusive')
   const presets = rosterOf(ctx)
   if (presets === undefined) {
-    return smart
-      ? { setup: agentCtx => mountSmartEnhancement(ctx, agentCtx) }
-      : {}
+    if (smart) return { setup: agentCtx => mountSmartEnhancement(ctx, agentCtx) }
+    if (forceSmart) return { setup: agentCtx => mountForceSmartEnhancement(ctx, agentCtx) }
+    return {}
   }
   let resolvedId: string
   try {
@@ -87,6 +94,8 @@ export async function composePreset(ctx: Context, requested?: string, smart = fa
       `dsh-tui: agent preset ${requested === undefined ? '(default)' : `"${requested}"`} unavailable ` +
         `(${error instanceof Error ? error.message : String(error)}) — composing the session without a preset`,
     )
+    if (smart) return { setup: agentCtx => mountSmartEnhancement(ctx, agentCtx) }
+    if (forceSmart) return { setup: agentCtx => mountForceSmartEnhancement(ctx, agentCtx) }
     return {}
   }
   return {
@@ -94,6 +103,7 @@ export async function composePreset(ctx: Context, requested?: string, smart = fa
     setup: async (agentCtx: Context) => {
       await presets.mount(agentCtx, resolvedId)
       if (smart) await mountSmartEnhancement(ctx, agentCtx, resolvedId)
+      else if (forceSmart) await mountForceSmartEnhancement(ctx, agentCtx, resolvedId)
     },
   }
 }
