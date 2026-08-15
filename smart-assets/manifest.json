@@ -7,7 +7,9 @@
         "suite": {
           "name": "dsh-routing-suite",
           "url": "https://github.com/yjh051108/dsh-routing-suite",
-          "sha": "eb1b00da039df34c0ab6012b2c93aadc28de391c"
+          "sha": "eb1b00da039df34c0ab6012b2c93aadc28de391c",
+          "latestReviewedSha": "a09eb0ade28e6ec3b8e5eb22985a14f6bfa1fbe5",
+          "latestReviewDecision": "excluded-router-pro-revert"
         },
         "router": {
           "name": "dsh-router-standard",
@@ -16,6 +18,8 @@
           "tag": "v0.3.0",
           "tagObservedAtSha": "7426c9cebc0999961aa6197eb42461d92a3ac3ee",
           "tagMutable": false,
+          "tagCurrentlyPresent": false,
+          "tagStatusReviewedAt": "2026-08-16",
           "license": "MIT",
           "sourceDirectory": "preset/router-standard",
           "policySourceDirectories": [
@@ -119,6 +123,26 @@
       "upstreamReview": {
         "reviewedAt": "2026-08-16",
         "decisions": [
+          {
+            "ref": "dsh-routing-suite@a09eb0a",
+            "decision": "excluded-router-pro-revert",
+            "reason": "The current suite main reverts its preset pointer from Router Pro 7426c9c to Router v0.2 eff787e, and the Router repository no longer publishes the v0.3.0 tag. Smart retains the reviewed historical Pro source by immutable SHA for DeepSeek V4 Pro instead of silently losing that policy."
+          },
+          {
+            "ref": "dsh-routing-suite#16",
+            "decision": "not-applicable-to-built-in-path",
+            "reason": "Smart does not execute the suite PowerShell installer or profile-link an unbuilt Injector checkout. Its optional host runtime must already expose a built entry and pass pinned package, version, and SHA-256 verification; otherwise Smart remains router-only."
+          },
+          {
+            "ref": "dsh-routing-suite#17",
+            "decision": "not-adopted-installer-only",
+            "reason": "The pull request changes only the suite PowerShell installer. Smart does not use that installer, so adopting it would add no runtime protection to the built-in integration."
+          },
+          {
+            "ref": "dsh-routing-suite#15",
+            "decision": "excluded-incomplete-router-pro-tree",
+            "reason": "The proposed installer copies router-pro although the referenced preset tree does not contain that directory, so it cannot replace Smart's pinned and verified Router Pro assets."
+          },
           {
             "ref": "dsh-routing-suite#13",
             "decision": "patched",

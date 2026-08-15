@@ -113,8 +113,11 @@ target agent reassembles its agent-scoped system prompt, dynamic context, tool
 schemas, and services; the old session remains available through `/resume`. Set
 `smart: true` or `DSH_TUI_SMART=1` to enable it for new sessions at startup.
 
-Smart is based on [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite), pinned to suite `eb1b00d` and Router
-v0.3.0. On `deepseek-v4-pro`, Smart uses Router Pro: maintenance/fix selects
+Smart is based on [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite), pinned to suite `eb1b00d` and historical Router Pro
+commit `7426c9c`. Upstream has deleted the `v0.3.0` tag, and current suite
+`a09eb0a` rolls its preset pointer back to Router v0.2. That reviewed rollback is
+explicitly excluded so the DeepSeek V4 Pro policy is not silently removed. On
+`deepseek-v4-pro`, Smart uses Router Pro: maintenance/fix selects
 the RL shell/editor interface, greenfield build selects the doer write-first
 interface, and ambiguous input uses router-v2 few-shot. Flash and unknown
 models keep Router Standard. These first-request prompt/context and tool
@@ -148,7 +151,18 @@ ForceSmart is likewise neither a preset nor a Shift+Tab session mode. Control
 it with `/force-smart on|off|status`, `forceSmart: true`, or
 `DSH_TUI_FORCE_SMART=1`. Adapted from
 [dsh-anchored-standard at `d97bec9`](https://github.com/xiaobright/dsh-anchored-standard/blob/d97bec91a3d668f4cf1d03ee5f20aae84fb6f85c/README.md) and
-[dsh-web-ui's Liangshen mode](https://github.com/zhu1090093659/dsh-web-ui/blob/3647a33fa467e0335260468614f6eed04b196c38/packages/dsh-liangshen/README.zh.md). The product, command, and UI name remains ForceSmart only. On a compatible clean first request, the system prompt is byte-aligned with the official Minimal one-line persona; the request temporarily exposes only `bash` and `str_replace_editor`, with their model-facing prompts and schemas aligned to official Minimal. The execution layer reuses compatible tools already allowed by the base preset, mounts the official editor when absent at the top level, and mounts official persistent Bash on non-Windows top-level agents when Bash is absent. It defers ordinary agent instructions and
+[dsh-web-ui's Liangshen mode](https://github.com/zhu1090093659/dsh-web-ui/blob/3647a33fa467e0335260468614f6eed04b196c38/packages/dsh-liangshen/README.zh.md).
+The product, command, and UI name remains ForceSmart only. As of 2026-08-16,
+dsh-web-ui main still equals that pinned reference. ForceSmart already covers
+open PR #253's missing-tool fail-open, but excludes its post-compaction tool
+narrowing because it would break plan, goal, and delegated-child boundaries.
+On a compatible clean first request, the system prompt is byte-aligned with the
+official Minimal one-line persona; the request temporarily exposes only `bash`
+and `str_replace_editor`, with their model-facing prompts and schemas aligned to
+official Minimal. The execution layer reuses compatible tools already allowed
+by the base preset, mounts the official editor when absent at the top level,
+and mounts official persistent Bash on non-Windows top-level agents when Bash
+is absent. It defers ordinary agent instructions and
 the skill catalog, and uses a 1024-token request budget. The complete base
 preset sections, contexts, tools, and native budget return after an anchored
 tool trajectory, a tool-less first answer, a turn boundary, or the bounded

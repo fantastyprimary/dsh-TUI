@@ -28,7 +28,21 @@ test('ForceSmart provenance and asset hashes remain pinned', () => {
     manifest.enhancement.sources.liangshenReference.sha,
     '3647a33fa467e0335260468614f6eed04b196c38',
   )
+  assert.equal(
+    manifest.enhancement.sources.liangshenReference.latestReviewedSha,
+    '3647a33fa467e0335260468614f6eed04b196c38',
+  )
+  assert.equal(manifest.enhancement.sources.liangshenReference.latestReviewedAt, '2026-08-16')
   assert.match(manifest.enhancement.sources.liangshenReference.role, /not a ForceSmart product name or alias/)
+  assert.deepEqual(
+    manifest.enhancement.upstreamReview.map(item => [item.ref, item.decision]),
+    [
+      ['dsh-web-ui@3647a33', 'current-no-new-merged-behavior'],
+      ['dsh-web-ui#253', 'fail-open-covered-compaction-reset-excluded'],
+      ['dsh-web-ui#205', 'not-applicable-to-packaged-assets'],
+      ['dsh-anchored-standard#15', 'patched-for-delegated-children'],
+    ],
+  )
   for (const [file, expected] of Object.entries(manifest.enhancement.files)) {
     const actual = createHash('sha256').update(readFileSync(join(assetRoot, file))).digest('hex')
     assert.equal(actual, expected, file)

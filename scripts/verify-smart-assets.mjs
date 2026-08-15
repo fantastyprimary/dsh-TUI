@@ -40,6 +40,8 @@ test('smart is packaged as an enhancement asset, not a roster preset', () => {
   ])
 
   assert.equal(manifest.enhancements.smart.sources.suite.sha, 'eb1b00da039df34c0ab6012b2c93aadc28de391c')
+  assert.equal(manifest.enhancements.smart.sources.suite.latestReviewedSha, 'a09eb0ade28e6ec3b8e5eb22985a14f6bfa1fbe5')
+  assert.equal(manifest.enhancements.smart.sources.suite.latestReviewDecision, 'excluded-router-pro-revert')
   assert.equal(manifest.enhancements.smart.sources.router.sha, '7426c9cebc0999961aa6197eb42461d92a3ac3ee')
   assert.equal(manifest.enhancements.smart.sources.router.tag, 'v0.3.0')
   assert.equal(manifest.enhancements.smart.sources.router.sourceDirectory, 'preset/router-standard')
@@ -48,12 +50,18 @@ test('smart is packaged as an enhancement asset, not a roster preset', () => {
     'preset/router-pro',
   ])
   assert.equal(manifest.enhancements.smart.sources.router.tagMutable, false)
+  assert.equal(manifest.enhancements.smart.sources.router.tagCurrentlyPresent, false)
+  assert.equal(manifest.enhancements.smart.sources.router.tagStatusReviewedAt, '2026-08-16')
   assert.equal(manifest.enhancements.smart.sources.modeBoost.sha, 'a9a666a6ec83ae72c6f683300384554e41131880')
   assert.equal(manifest.enhancements.smart.sources.modeBoost.vendored, false)
   assert.equal(manifest.enhancements.smart.sources.injector.vendored, false)
   assert.deepEqual(
     manifest.enhancements.smart.upstreamReview.decisions.map(item => item.ref),
     [
+      'dsh-routing-suite@a09eb0a',
+      'dsh-routing-suite#16',
+      'dsh-routing-suite#17',
+      'dsh-routing-suite#15',
       'dsh-routing-suite#13',
       'dsh-routing-suite#12',
       'dsh-routing-suite#11',

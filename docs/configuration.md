@@ -107,8 +107,10 @@ Smart 不是第五个 Agent preset，而是叠加在 `standard`、`code`、`mini
 启动即启用。
 
 Smart 基于 [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite)，固定到
-suite `eb1b00d` 与 Router v0.3.0。Smart 在 `deepseek-v4-pro` 上使用新的 Router Pro
-策略：维护/修复选择 RL shell/editor 接口，新建/构建选择 doer write-first 接口，
+suite `eb1b00d` 与历史 Router Pro 提交 `7426c9c`。上游已删除 `v0.3.0` 标签；
+当前 suite `a09eb0a` 又把 preset 指针回退到 Router v0.2，因此该回退经过审计后被
+明确排除，避免 DeepSeek V4 Pro 策略被静默移除。Smart 在 `deepseek-v4-pro` 上使用
+Router Pro 策略：维护/修复选择 RL shell/editor 接口，新建/构建选择 doer write-first 接口，
 无明确证据时使用 router-v2 few-shot；Flash 与未知模型继续使用 Router Standard。
 这些首轮 prompt/context 与工具面只在基础 preset 为 `standard` 时启用；其他 preset
 保留自己的完整工具目录，同时使用非破坏性的任务分类、near-field 引导和 router
@@ -133,7 +135,10 @@ ForceSmart 同样不是 preset 或 Shift+Tab session mode；使用 `/force-smart
 `forceSmart: true` 或 `DSH_TUI_FORCE_SMART=1` 控制。它参考固定到 `d97bec9` 的
 [dsh-anchored-standard](https://github.com/xiaobright/dsh-anchored-standard/blob/d97bec91a3d668f4cf1d03ee5f20aae84fb6f85c/README.zh-CN.md)
 与 [dsh-web-ui 的“梁神模式”](https://github.com/zhu1090093659/dsh-web-ui/blob/3647a33fa467e0335260468614f6eed04b196c38/packages/dsh-liangshen/README.zh.md)，
-但产品、命令与界面名称始终只使用 ForceSmart。在兼容的干净首轮，system prompt
+但产品、命令与界面名称始终只使用 ForceSmart。截至 2026-08-16，dsh-web-ui 主线仍
+等于该固定提交；开放 PR #253 的缺工具 fail-open 已由 ForceSmart 覆盖，但其
+compaction 后重新收窄工具的方案会破坏 plan/goal/子代理边界，故不采用。在兼容的
+干净首轮，system prompt
 精确对齐官方 Minimal 的单行 persona，临时只暴露 `bash` 和 `str_replace_editor`，并将
 两者的模型可见提示与 schema 对齐官方 Minimal；执行层优先复用基础 preset 已允许的
 兼容工具，顶层缺少 editor 时挂载官方实现，非 Windows 顶层缺少 Bash 时挂载官方

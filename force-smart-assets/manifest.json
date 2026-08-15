@@ -14,6 +14,8 @@
         "name": "dsh-web-ui/packages/dsh-liangshen",
         "url": "https://github.com/zhu1090093659/dsh-web-ui",
         "sha": "3647a33fa467e0335260468614f6eed04b196c38",
+        "latestReviewedSha": "3647a33fa467e0335260468614f6eed04b196c38",
+        "latestReviewedAt": "2026-08-16",
         "license": "Apache-2.0",
         "role": "Pinned mechanism reference only; it is not a ForceSmart product name or alias."
       }
@@ -39,6 +41,28 @@
       "The Windows executor uses a fresh process without OS sandbox confinement and fails open when Git Bash cannot be resolved.",
       "Active plan/goal state fails open with the complete base surface.",
       "Child scopes never receive enhancement-owned tools and start promoted to protect one-shot delegated tasks."
+    ],
+    "upstreamReview": [
+      {
+        "ref": "dsh-web-ui@3647a33",
+        "decision": "current-no-new-merged-behavior",
+        "reason": "The reviewed dsh-web-ui main still equals the pinned Liangshen mechanism reference."
+      },
+      {
+        "ref": "dsh-web-ui#253",
+        "decision": "fail-open-covered-compaction-reset-excluded",
+        "reason": "ForceSmart already warns once and restores the complete base surface when bootstrap tools are unavailable. The proposed compaction reset is excluded because it also reacts to failed compactions and can remove active plan, goal, workflow, and delegated-child capabilities."
+      },
+      {
+        "ref": "dsh-web-ui#205",
+        "decision": "not-applicable-to-packaged-assets",
+        "reason": "The pull request changes Windows preset-tree copying. ForceSmart loads its assets directly from the installed dsh-TUI package and does not copy that tree."
+      },
+      {
+        "ref": "dsh-anchored-standard#15",
+        "decision": "patched-for-delegated-children",
+        "reason": "ForceSmart children start promoted with the base preset's tool-filtered catalog, so a one-shot delegated task is not constrained to the two bootstrap tools and 1024-token cap."
+      }
     ]
   }
 }
