@@ -405,3 +405,26 @@ export const ENABLE_MODIFY_OTHER_KEYS = csi('>4;2m')
  * Disable xterm modifyOtherKeys (reset to default).
  */
 export const DISABLE_MODIFY_OTHER_KEYS = csi('>4m')
+
+// win32-input-mode (ConPTY, DECSET 9001)
+// Windows-only keyboard protocol: the terminal reports every key as a full
+// INPUT_RECORD (CSI Vk;Sc;Uc;Kd;Cs;Rc _), which is the ONLY way Enter's
+// modifier bits survive on Windows — Windows Terminal/conhost implement
+// kitty/modifyOtherKeys but never attach modifiers to Enter
+// (microsoft/terminal#530), so Shift+Enter is indistinguishable from Enter
+// over classic VT sequences. Supported by both Windows Terminal and classic
+// conhost (anything fronting ConPTY); terminals that don't know the private
+// mode (mintty/winpty) ignore it.
+// See: doc/specs/#4999 - Improved keyboard handling in Conpty (microsoft/terminal)
+
+/**
+ * Enable win32-input-mode.
+ * CSI ? 9001 h — every key arrives as CSI Vk;Sc;Uc;Kd;Cs;Rc _
+ */
+export const ENABLE_WIN32_INPUT_MODE = csi('?9001h')
+
+/**
+ * Disable win32-input-mode (restore classic VT input).
+ * CSI ? 9001 l
+ */
+export const DISABLE_WIN32_INPUT_MODE = csi('?9001l')

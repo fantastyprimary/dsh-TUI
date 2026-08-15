@@ -250,4 +250,14 @@ export declare const ENABLE_MODIFY_OTHER_KEYS: string;
  * Disable xterm modifyOtherKeys (reset to default).
  */
 export declare const DISABLE_MODIFY_OTHER_KEYS: string;
+/**
+ * Enable win32-input-mode.
+ * CSI ? 9001 h — every key arrives as CSI Vk;Sc;Uc;Kd;Cs;Rc _
+ */
+export declare const ENABLE_WIN32_INPUT_MODE: string;
+/**
+ * Disable win32-input-mode (restore classic VT input).
+ * CSI ? 9001 l
+ */
+export declare const DISABLE_WIN32_INPUT_MODE: string;
 //# sourceMappingURL=csi.d.ts.map

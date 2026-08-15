@@ -34,8 +34,8 @@ import createRenderer, { type Renderer } from './renderer.js';
 import { CellWidth, CharPool, cellAt, createScreen, HyperlinkPool, isEmptyCellAt, migrateScreenPools, StylePool } from './screen.js';
 import { applySearchHighlight } from './searchHighlight.js';
 import { applySelectionOverlay, captureScrolledRows, clearSelection, createSelectionState, extendSelection, type FocusMove, findPlainTextUrlAt, getSelectedText, hasSelection, moveFocus, type SelectionState, selectLineAt, selectWordAt, shiftAnchor, shiftSelection, shiftSelectionForFollow, startSelection, updateSelection } from './selection.js';
-import { SYNC_OUTPUT_SUPPORTED, supportsExtendedKeys, type Terminal, writeDiffToTerminal } from './terminal.js';
-import { CURSOR_HOME, cursorMove, cursorPosition, DISABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS, ENABLE_KITTY_KEYBOARD, ENABLE_MODIFY_OTHER_KEYS, ERASE_SCREEN, SGR_RESET } from './termio/csi.js';
+import { SYNC_OUTPUT_SUPPORTED, supportsExtendedKeys, supportsWin32InputMode, type Terminal, writeDiffToTerminal } from './terminal.js';
+import { CURSOR_HOME, cursorMove, cursorPosition, DISABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS, DISABLE_WIN32_INPUT_MODE, ENABLE_KITTY_KEYBOARD, ENABLE_MODIFY_OTHER_KEYS, ENABLE_WIN32_INPUT_MODE, ERASE_SCREEN, SGR_RESET } from './termio/csi.js';
 import { DBP, DFE, DISABLE_MOUSE_TRACKING, ENABLE_MOUSE_TRACKING, ENTER_ALT_SCREEN, EXIT_ALT_SCREEN, SHOW_CURSOR } from './termio/dec.js';
 import { CLEAR_ITERM2_PROGRESS, CLEAR_TAB_STATUS, setClipboard, supportsTabStatus, wrapForMultiplexer } from './termio/osc.js';
 import { TerminalWriteProvider } from './useTerminalNotification.js';
@@ -362,7 +362,9 @@ export default class Ink {
     // Disable extended key reporting first — editors that don't speak
     // CSI-u (e.g. nano) show "Unknown sequence" for every Ctrl-<key> if
     // kitty/modifyOtherKeys stays active. exitAlternateScreen re-enables.
-    DISABLE_KITTY_KEYBOARD + DISABLE_MODIFY_OTHER_KEYS + (this.altScreenMouseTracking ? DISABLE_MOUSE_TRACKING : '') + (
+    // win32-input-mode (native Windows) likewise must not leak into the
+    // editor — it would turn every key into INPUT_RECORD sequences.
+    DISABLE_WIN32_INPUT_MODE + DISABLE_KITTY_KEYBOARD + DISABLE_MODIFY_OTHER_KEYS + (this.altScreenMouseTracking ? DISABLE_MOUSE_TRACKING : '') + (
     // disable mouse (no-op if off)
     this.altScreenActive ? '' : '\x1b[?1049h') +
     // enter alt (already in alt if fullscreen)
@@ -443,7 +445,7 @@ export default class Ink {
     // ctrl+shift+<letter> from ctrl+<letter>. Pop-before-push keeps the
     // Kitty stack balanced (a well-behaved editor restores our entry, so
     // without the pop we'd accumulate depth on each editor round-trip).
-    this.options.stdout.write('\x1b[?1004h' + (supportsExtendedKeys() ? DISABLE_KITTY_KEYBOARD + ENABLE_KITTY_KEYBOARD + ENABLE_MODIFY_OTHER_KEYS : ''));
+    this.options.stdout.write('\x1b[?1004h' + (supportsWin32InputMode() ? ENABLE_WIN32_INPUT_MODE : supportsExtendedKeys() ? DISABLE_KITTY_KEYBOARD + ENABLE_KITTY_KEYBOARD + ENABLE_MODIFY_OTHER_KEYS : ''));
   }
   onRender() {
     if (this.isUnmounted || this.isPaused) {
@@ -939,8 +941,11 @@ export default class Ink {
     // Extended keys — re-assert if enabled (App.tsx enables these on
     // allowlisted terminals at raw-mode entry; a terminal reset clears them).
     // Pop-before-push keeps Kitty stack depth at 1 instead of accumulating
-    // on each call.
-    if (supportsExtendedKeys()) {
+    // on each call. win32-input-mode is a plain DEC private mode (no stack),
+    // so a bare re-set suffices.
+    if (supportsWin32InputMode()) {
+      this.options.stdout.write(ENABLE_WIN32_INPUT_MODE);
+    } else if (supportsExtendedKeys()) {
       this.options.stdout.write(DISABLE_KITTY_KEYBOARD + ENABLE_KITTY_KEYBOARD + ENABLE_MODIFY_OTHER_KEYS);
     }
     if (!this.altScreenActive) {
@@ -1579,6 +1584,8 @@ export default class Ink {
       // Disable extended key reporting (both kitty and modifyOtherKeys)
       writeSync(1, DISABLE_MODIFY_OTHER_KEYS);
       writeSync(1, DISABLE_KITTY_KEYBOARD);
+      // Disable win32-input-mode (no-op where never enabled)
+      writeSync(1, DISABLE_WIN32_INPUT_MODE);
       // Disable focus events (DECSET 1004)
       writeSync(1, DFE);
       // Disable bracketed paste mode

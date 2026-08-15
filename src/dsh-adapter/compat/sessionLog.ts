@@ -3,10 +3,42 @@
  *
  * Title lookup tolerates event types unknown to the current harness. Offline
  * rename and delete support the `/resume` picker when no live Agent owns the
- * selected persisted session.
+ * selected persisted session. The resume seam registers vouched-for legacy
+ * event types into every reachable KNOWN_SESSION_EVENT_TYPES copy so the
+ * strict read path stops rejecting whole sessions over them (issue #153).
+ *
+ * Registration background: plugins like dsh-working-activity (< the publish
+ * cut) appended `activity/status` through `session.append`, but rc.6's
+ * append exposes no `ignorable` flag and the type is absent from
+ * KNOWN_SESSION_EVENT_TYPES — so resume's seed validation rejects the WHOLE
+ * session ("unknown to this harness and not marked ignorable"). Upstream's
+ * catalog header defers a registration surface "until such a consumer
+ * exists"; the working-activity plugin became that consumer at #119 and
+ * registers its type at load. Logs written BEFORE that cut, resumed in a
+ * process where the plugin's registration never ran (plugin unmounted, or
+ * a bare cordis.yml), still hit the rejection — this module is the consumer
+ * for exactly that residue.
+ *
+ * Why registration and NOT rewriting the log to mark events `ignorable`
+ * (the #107 approach, restored then replaced after review): the store is
+ * shared with dsh web (#24) and possibly a second TUI instance (#153), and
+ * a whole-file tmp+rename swap (a) loses frames an already-open appender
+ * lands on the replaced inode, (b) drops the backend's 0600 artifact mode,
+ * (c) re-encodes frames without the writer's checksum flag, and (d) dies on
+ * torn tails the backend itself can recover. Registration touches nothing
+ * on disk and degrades to exactly the pre-patch behavior when no copy
+ * resolves.
+ *
+ * Whitelist discipline: ONLY `activity/status` — the type the plugin
+ * provably wrote as ephemeral UI frames. Anything else unknown stays
+ * unknown: upstream's fail-closed ("likely written by a newer harness") is
+ * a feature — silently skipping a REQUIRED future event would reconstruct
+ * a wrong session. Retires the day upstream's shared catalog adopts the
+ * type or ships a real registration API (the add() calls become no-ops).
  *
  * @module @deepseek-harness-tui/dsh-tui/compat/sessionLog
  */
+import { createRequire } from 'node:module'
 import {
   appendFileSync,
   existsSync,
@@ -18,6 +50,14 @@ import {
 import { dirname, join, sep } from 'node:path'
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import { homeDir } from '../../utils/paths.js'
+
+/**
+ * Legacy third-party session-event types the TUI vouches for as ephemeral
+ * UI frames — safe for the strict read path to accept and skip. Exported
+ * for the regression verifier; grow it only with proof the type was always
+ * inert (never load-bearing for session reconstruction).
+ */
+export const LEGACY_SESSION_EVENT_TYPES: readonly string[] = ['activity/status']
 
 /** Zstd frame magic number, little-endian (0xFD2FB528). */
 const ZSTD_MAGIC = 0xfd2fb528
@@ -76,33 +116,23 @@ function findSessionLogFile(sessionId: string): string | undefined {
   return undefined
 }
 
-/** One decoded zstd frame: its original byte span plus parsed envelopes. */
-interface DecodedFrame {
-  /** Original compressed bytes — reused verbatim when nothing inside changed. */
-  readonly raw: Buffer
-  /** Parsed event envelopes of this frame, in order. */
-  readonly events: Record<string, unknown>[]
-}
-
 /**
- * Decode a (possibly multi-frame) zstd jsonl log, keeping frames separate.
- * Frames are split by magic scan; any frame failing to decode or any line
- * failing to parse throws, so callers abort instead of rewriting a log they
- * did not fully understand.
+ * Decode a (possibly multi-frame) zstd jsonl log. Frames are split by magic
+ * scan; any frame failing to decode or any line failing to parse throws, so
+ * callers abort instead of acting on a log they did not fully understand.
  * @param buf - Raw file bytes.
- * @returns Per-frame byte spans and parsed event envelopes, in log order.
+ * @returns Parsed event envelopes, in log order.
  */
-function decodeFrames(buf: Buffer): DecodedFrame[] {
+function decodeEvents(buf: Buffer): Record<string, unknown>[] {
   const offsets: number[] = []
   for (let i = 0; i + 4 <= buf.length; i++) {
     if (buf.readUInt32LE(i) === ZSTD_MAGIC) offsets.push(i)
   }
   if (offsets.length === 0) throw new Error('no zstd frame found')
-  return offsets.map((start, i) => {
+  return offsets.flatMap((start, i) => {
     const end = i + 1 < offsets.length ? offsets[i + 1]! : buf.length
-    const raw = buf.subarray(start, end)
-    const text = zstdDecompressSync(raw).toString('utf8')
-    const events = text
+    const text = zstdDecompressSync(buf.subarray(start, end)).toString('utf8')
+    return text
       .split('\n')
       .filter((line) => line.length > 0)
       .map((line) => {
@@ -112,8 +142,61 @@ function decodeFrames(buf: Buffer): DecodedFrame[] {
         }
         return parsed as Record<string, unknown>
       })
-    return { raw, events }
   })
+}
+
+/**
+ * Register every {@link LEGACY_SESSION_EVENT_TYPES} type as known in EVERY
+ * reachable KNOWN_SESSION_EVENT_TYPES copy, ahead of the strict read path
+ * (`agents.resume` seed validation, `persistence.load`). Idempotent; never
+ * throws.
+ *
+ * Why a walk instead of a single import: a runtime can load dsh-session
+ * more than once (CLI tree vs profile tree, version overlap during
+ * upgrades, pnpm peer-context splits), and the strict validator — which
+ * lives in the dsh-session-persistence package — consults only ITS OWN
+ * tree's copy. Registering through one import leaves the other trees'
+ * copies untouched. So from EACH base anchor (this module = the dsh-tui
+ * tree, the process entry point = the launcher/CLI tree) the walk
+ * registers the tree's own dsh-session AND steps one edge further:
+ * resolve the validator package from that same tree, then register the
+ * dsh-session copy the validator's entry resolves. A branch that cannot
+ * be resolved simply is not there; resolved module paths are deduped.
+ */
+export function ensureLegacySessionEventTypes(): void {
+  const roots = [import.meta.url, process.argv[1]].filter(
+    (anchor): anchor is string => typeof anchor === 'string' && anchor.length > 0,
+  )
+  const visitedAnchors = new Set<string>()
+  const registeredCopies = new Set<string>()
+  const walk = (anchor: string): void => {
+    if (visitedAnchors.has(anchor)) return
+    visitedAnchors.add(anchor)
+    let req: ReturnType<typeof createRequire>
+    try {
+      req = createRequire(anchor)
+    } catch {
+      return
+    }
+    try {
+      const copy = req.resolve('@deepseek-ai/dsh-session')
+      if (!registeredCopies.has(copy)) {
+        registeredCopies.add(copy)
+        const mod = req(copy) as { KNOWN_SESSION_EVENT_TYPES?: Set<string> }
+        for (const type of LEGACY_SESSION_EVENT_TYPES) {
+          mod.KNOWN_SESSION_EVENT_TYPES?.add(type)
+        }
+      }
+    } catch {
+      // No resolvable dsh-session copy from this anchor — nothing here.
+    }
+    try {
+      walk(req.resolve('@deepseek-ai/dsh-session-persistence'))
+    } catch {
+      // Validator package not reachable from this tree — nothing to cover.
+    }
+  }
+  for (const root of roots) walk(root)
 }
 
 /**
@@ -137,22 +220,20 @@ export function readSessionTitleFromLog(
   try {
     const file = findSessionLogFile(sessionId)
     if (file === undefined) return undefined
-    const frames = decodeFrames(readFileSync(file))
+    const events = decodeEvents(readFileSync(file))
     let titled: string | undefined
     let firstUser: string | undefined
     let hasUserMessage = false
-    for (const frame of frames) {
-      for (const event of frame.events) {
-        if (event['type'] === 'session/title') {
-          const title = (event['data'] as { title?: unknown } | undefined)?.['title']
-          if (typeof title === 'string' && title.trim().length > 0) titled = title
-        } else if (event['type'] === 'user/message') {
-          hasUserMessage = true
-          if (firstUser === undefined) {
-            firstUser = firstTextOfContent(
-              (event['data'] as { content?: unknown } | undefined)?.['content'],
-            )
-          }
+    for (const event of events) {
+      if (event['type'] === 'session/title') {
+        const title = (event['data'] as { title?: unknown } | undefined)?.['title']
+        if (typeof title === 'string' && title.trim().length > 0) titled = title
+      } else if (event['type'] === 'user/message') {
+        hasUserMessage = true
+        if (firstUser === undefined) {
+          firstUser = firstTextOfContent(
+            (event['data'] as { content?: unknown } | undefined)?.['content'],
+          )
         }
       }
     }
@@ -209,14 +290,11 @@ export function appendSessionTitle(sessionId: string, title: string): 'appended'
   try {
     const file = findSessionLogFile(sessionId)
     if (file === undefined) return 'unavailable'
-    const original = readFileSync(file)
-    const frames = decodeFrames(original)
+    const events = decodeEvents(readFileSync(file))
     let maxSeq = -1
-    for (const frame of frames) {
-      for (const event of frame.events) {
-        const seq = event['seq']
-        if (typeof seq === 'number' && seq > maxSeq) maxSeq = seq
-      }
+    for (const event of events) {
+      const seq = event['seq']
+      if (typeof seq === 'number' && seq > maxSeq) maxSeq = seq
     }
     // Same envelope shape as a manual /rename append ({ title } only); the
     // seed validator asks only for type/seq/time/data on non-message types.

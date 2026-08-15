@@ -26,6 +26,7 @@ import {
   writeForceSmartSession,
 } from '../forceSmartPrefs.js'
 import { resolveEnhancementSelection } from '../enhancementPrefs.js'
+import { ensureLegacySessionEventTypes } from './compat/index.js'
 import { clearResumeTarget, writeResumeTarget } from '../sessionHistory.js'
 import { resolveSessionCwd } from '../utils/workspaceRoot.js'
 import { checkForTuiUpdate, installedTuiVersion, isVersionNewer, resolveDshProfileName, resolveTuiUpdateTarget, updateTuiAndRestart } from '../update.js'
@@ -35,7 +36,7 @@ import { Chat } from '../screens/Chat.js'
 import { attachSessionToWorkspace } from './workspace.js'
 import { render, ThemeProvider, AlternateScreen } from '../ui.js'
 import instances from '../ink/instances.js'
-import { cursorMove, DISABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS } from '../ink/termio/csi.js'
+import { cursorMove, DISABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS, DISABLE_WIN32_INPUT_MODE } from '../ink/termio/csi.js'
 import { DBP, DFE, DISABLE_MOUSE_TRACKING, EXIT_ALT_SCREEN, SHOW_CURSOR } from '../ink/termio/dec.js'
 import { CLEAR_ITERM2_PROGRESS, CLEAR_TAB_STATUS, supportsTabStatus, wrapForMultiplexer } from '../ink/termio/osc.js'
 
@@ -493,6 +494,10 @@ async function resolveAgent(
       }
     }
     try {
+      // Compat boundary: register vouched-for legacy event types before the
+      // strict read path (issue #153) — same seam as the /resume picker,
+      // here for the launch-time --resume flow. In-process only.
+      ensureLegacySessionEventTypes()
       // The resumed session keeps the preset its log records (last
       // `agent-preset/selected` wins over the creation header), never the
       // caller's current preference.
@@ -666,6 +671,7 @@ async function finishExit(
       DISABLE_MOUSE_TRACKING,
       DISABLE_MODIFY_OTHER_KEYS,
       DISABLE_KITTY_KEYBOARD,
+      DISABLE_WIN32_INPUT_MODE,
       DFE,
       DBP,
       SHOW_CURSOR,

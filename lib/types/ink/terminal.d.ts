@@ -42,9 +42,27 @@ export declare function isXtermJs(): boolean;
 /**
  * True if this terminal correctly handles extended key reporting
  * (Kitty keyboard protocol + xterm modifyOtherKeys).
+ * WT_SESSION catches Windows Terminal regardless of TERM_PROGRAM (which WT
+ * doesn't set and SSH doesn't forward) — its modifyOtherKeys implementation
+ * covers navigation keys. It does NOT cover Enter (microsoft/terminal#530);
+ * Shift+Enter on native Windows needs win32-input-mode instead — see
+ * supportsWin32InputMode (issue #147).
  * @returns true when the terminal is on the extended-keys allowlist.
  */
 export declare function supportsExtendedKeys(): boolean;
+/**
+ * True when win32-input-mode (DECSET 9001, `CSI ? 9001 h`) should drive
+ * keyboard input. This is a ConPTY feature — both Windows Terminal and
+ * classic conhost switch into it when the app emits the sequence, so a
+ * platform check alone covers both. In this mode every key arrives as a
+ * full INPUT_RECORD (`CSI Vk;Sc;Uc;Kd;Cs;Rc _`), the only encoding that
+ * preserves Enter's Shift/Ctrl bits on Windows (issue #147). It replaces
+ * the kitty/modifyOtherKeys push — callers must treat them as mutually
+ * exclusive. Non-ConPTY Windows terminals (mintty via winpty) ignore the
+ * unknown private mode and fall back to classic VT input unchanged.
+ * @returns true on native Windows (never in WSL — platform is linux there).
+ */
+export declare function supportsWin32InputMode(): boolean;
 /**
  * True if the terminal scrolls the viewport when it receives cursor-up
  * sequences that reach above the visible area. On Windows, conhost's

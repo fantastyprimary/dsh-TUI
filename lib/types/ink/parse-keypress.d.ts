@@ -58,6 +58,17 @@ export type TerminalResponse =
     type: 'xtversion';
     name: string;
 };
+/** Mutable cross-call state for the decomposed-paste matcher. */
+export type Win32PasteState = {
+    /** true between the decomposed start and end markers */
+    active: boolean;
+    /** progress into the marker pattern currently being matched */
+    matched: number;
+    /** keys held while a marker prefix match is in flight */
+    held: ParsedKey[];
+    /** collected paste content while active */
+    buffer: string;
+};
 /**
  * Parser state carried between parseMultipleKeypresses calls: paste mode,
  * buffered incomplete input, and the internal tokenizer instance.
@@ -66,6 +77,26 @@ export type KeyParseState = {
     mode: 'NORMAL' | 'IN_PASTE';
     incomplete: string;
     pasteBuffer: string;
+    /**
+     * Pending high surrogate from a win32-input-mode record. Uc is a UTF-16
+     * code unit, so supplementary-plane characters (emoji, CJK ext-B) arrive
+     * as two consecutive records; the high half waits here for its low half.
+     */
+    win32HighSurrogate?: number;
+    /**
+     * Pending high surrogate for the Alt+numpad synthesis path — separate
+     * from win32HighSurrogate because the two Alt rounds of one supplementary
+     * char interleave with keydown records (Alt-down, numpad digits) that
+     * would settle the regular slot before the low half arrives.
+     */
+    win32AltHighSurrogate?: number;
+    /**
+     * Decomposed bracketed-paste tracking for win32-input-mode. Classic
+     * conhost synthesizes pastes as per-char KEY_EVENT_RECORDs — including
+     * the ESC[200~ / ESC[201~ markers themselves — so under W32IM the markers
+     * arrive as ordinary key records and must be reassembled here (issue #147).
+     */
+    win32Paste?: Win32PasteState;
     _tokenizer?: Tokenizer;
 };
 /** Initial `KeyParseState` for a fresh parser. */

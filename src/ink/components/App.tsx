@@ -26,6 +26,7 @@ import {
 	isXtermJs,
 	setXtversionName,
 	supportsExtendedKeys,
+	supportsWin32InputMode,
 } from "../terminal.js";
 import {
 	getTerminalFocused,
@@ -35,8 +36,10 @@ import { TerminalQuerier, xtversion } from "../terminal-querier.js";
 import {
 	DISABLE_KITTY_KEYBOARD,
 	DISABLE_MODIFY_OTHER_KEYS,
+	DISABLE_WIN32_INPUT_MODE,
 	ENABLE_KITTY_KEYBOARD,
 	ENABLE_MODIFY_OTHER_KEYS,
+	ENABLE_WIN32_INPUT_MODE,
 	FOCUS_IN,
 	FOCUS_OUT,
 } from "../termio/csi.js";
@@ -311,11 +314,17 @@ export default class App extends PureComponent<Props, State> {
 				// Enable terminal focus reporting (DECSET 1004)
 				this.props.stdout.write(EFE);
 				// Enable extended key reporting so ctrl+shift+<letter> is
-				// distinguishable from ctrl+<letter>. We write both the kitty stack
-				// push (CSI >1u) and xterm modifyOtherKeys level 2 (CSI >4;2m) —
-				// terminals honor whichever they implement (tmux only accepts the
-				// latter).
-				if (supportsExtendedKeys()) {
+				// distinguishable from ctrl+<letter>. On native Windows use
+				// win32-input-mode instead: kitty/modifyOtherKeys there never
+				// attach modifiers to Enter (microsoft/terminal#530), so
+				// Shift+Enter is only visible as a win32 INPUT_RECORD
+				// (issue #147). Elsewhere, write both the kitty stack push
+				// (CSI >1u) and xterm modifyOtherKeys level 2 (CSI >4;2m) —
+				// terminals honor whichever they implement (tmux only accepts
+				// the latter).
+				if (supportsWin32InputMode()) {
+					this.props.stdout.write(ENABLE_WIN32_INPUT_MODE);
+				} else if (supportsExtendedKeys()) {
 					this.props.stdout.write(ENABLE_KITTY_KEYBOARD);
 					this.props.stdout.write(ENABLE_MODIFY_OTHER_KEYS);
 				}
@@ -359,6 +368,8 @@ export default class App extends PureComponent<Props, State> {
 		if (--this.rawModeEnabledCount === 0) {
 			this.props.stdout.write(DISABLE_MODIFY_OTHER_KEYS);
 			this.props.stdout.write(DISABLE_KITTY_KEYBOARD);
+			// No-op on terminals that never entered win32-input-mode
+			this.props.stdout.write(DISABLE_WIN32_INPUT_MODE);
 			// Disable terminal focus reporting (DECSET 1004)
 			this.props.stdout.write(DFE);
 			// Disable bracketed paste mode
@@ -425,11 +436,16 @@ export default class App extends PureComponent<Props, State> {
 			if (this.incompleteEscapeTimer) {
 				clearTimeout(this.incompleteEscapeTimer);
 			}
+			// win32Paste.active: a decomposed bracketed paste on classic
+			// conhost (markers arrive as win32 key records) gets the same
+			// long grace as token-level paste — a mid-paste flush would
+			// finalize early and turn the remaining body into real keys.
+			const inPaste =
+				this.keyParseState.mode === "IN_PASTE" ||
+				this.keyParseState.win32Paste?.active === true;
 			this.incompleteEscapeTimer = setTimeout(
 				this.flushIncomplete,
-				this.keyParseState.mode === "IN_PASTE"
-					? this.PASTE_TIMEOUT
-					: this.NORMAL_TIMEOUT,
+				inPaste ? this.PASTE_TIMEOUT : this.NORMAL_TIMEOUT,
 			);
 		}
 	};
