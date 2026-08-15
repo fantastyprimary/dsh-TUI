@@ -155,8 +155,18 @@ Current Anchored main has no default output cap. To remain a decoupled overlay,
 ForceSmart does not replace the base preset's long-lived execution layer, but
 its first request does align the two model-facing tool schemas with Minimal and
 deliberately retains the fixed reference composition's 1024-token budget.
-Windows never presents `pwsh` as Bash; an incompatible two-tool surface fails
-open.
+On native Windows, a missing Bash is supplied by an agent-scoped Git Bash
+executor adapted from Anchored Standard. It runs `bash -c` through DSH's
+subprocess service, is hidden from the model when the complete base catalog
+(including `pwsh`) returns, and is disposed with the agent scope. It never
+presents PowerShell as Bash. ForceSmart checks the
+usual Git for Windows locations and `PATH`, rejects the System32 WSL launcher,
+and accepts an explicit absolute path through
+`DSH_TUI_FORCE_SMART_BASH_PATH`. Each Windows call starts a fresh shell and
+runs without OS sandbox confinement. Resolution or registration failure is
+loud and fails open to the complete base preset. WSL2 reports Linux and uses
+DSH's persistent Bash backend, as do Linux and macOS. Smart independently uses
+native `pwsh` on Windows and native `bash` on WSL2, Linux, and macOS.
 Active `/plan`, active `/goal`, and all ForceSmart children start promoted and
 pass through intact, preserving `exit_plan_mode`, goal, subagent, and workflow
 control paths. ForceSmart does not reject, branch on, or warn for other model
@@ -231,6 +241,7 @@ for the complete field reference.
 | `DSH_TUI_PRESET` | Override the default Agent preset for new sessions |
 | `DSH_TUI_SMART` | `1`/`0`: override the Smart enhancement default for new sessions |
 | `DSH_TUI_FORCE_SMART` | `1`/`0`: override the ForceSmart enhancement default for new sessions |
+| `DSH_TUI_FORCE_SMART_BASH_PATH` | Optional on Windows: absolute Git Bash `bash.exe` path used by the ForceSmart bootstrap |
 | `DSH_SMART_RUNTIME_PATH` | Optional Smart host runtime package directory or `lib/index.js` path |
 | `DSH_TUI_THEME` | Pin a built-in (`auto`/`light`/`dark`/`dark-ansi`) or custom theme ahead of persisted selection |
 | `DSH_TUI_DISABLE_MOUSE` | Temporarily disable mouse handling in fullscreen mode |

@@ -135,13 +135,23 @@ ForceSmart 同样不是 preset 或 Shift+Tab session mode；使用 `/force-smart
 精确对齐官方 Minimal 的单行 persona，临时只暴露 `bash` 和 `str_replace_editor`，并将
 两者的模型可见提示与 schema 对齐官方 Minimal；执行层优先复用基础 preset 已允许的
 兼容工具，顶层缺少 editor 时挂载官方实现，非 Windows 顶层缺少 Bash 时挂载官方
-persistent Bash。ForceSmart 同时延后普通 agent instructions/skill catalog，并把请求预算
+persistent Bash。Windows 原生环境缺少 Bash 时，ForceSmart 按 Anchored 的做法在当前
+顶层 agent scope 注册真实 Git Bash executor，通过 DSH subprocess 执行 `bash -c`；晋升后
+从模型可见目录隐藏该临时工具并恢复基础 preset 的 `pwsh` 与完整目录，agent dispose 时
+再由 Cordis scope 回收执行器。它会依次检查 Git for Windows
+常见安装路径和 `PATH`，并拒绝把 System32 的 WSL launcher 当成 Git Bash；可用
+`DSH_TUI_FORCE_SMART_BASH_PATH` 指定自定义绝对路径。Windows executor 每次调用启动新
+shell，且没有 OS sandbox confinement；找不到 Git Bash 或注册失败时会明确告警并完整
+fail-open。WSL2 的 `process.platform` 是 Linux，因此走官方 persistent Bash 路径，不依赖
+Windows Git Bash。ForceSmart 同时延后普通 agent instructions/skill catalog，并把请求预算
 设为 1024；首次工具轨迹满足 Anchored 门控、首答无工具、turn 结束或安全兜底后，恢复
 基础 preset 的完整 sections、contexts、工具及原请求预算。已有历史的 fork/resume 直接
 使用恢复后的表面。Anchored 当前主线默认不封顶；ForceSmart 为保持 overlay 解耦，
 不替换基础 preset 的长期执行层，但首轮模型可见的两工具 schema 与 Minimal 对齐，并
 有意保留固定参考组合中的 1024 首轮预算。Windows 不会把 `pwsh` 冒充 Bash；无法形成
-兼容两工具表面时直接 fail-open。活跃 `/plan`、活跃 `/goal` 与所有 ForceSmart 子代理
+兼容两工具表面时直接 fail-open。Smart 在 Windows 使用原生 `pwsh`，在 WSL2/Linux/macOS
+使用原生 `bash`；ForceSmart 在这些平台分别使用上述 Git Bash 或 persistent Bash 首轮后
+恢复基础 preset。活跃 `/plan`、活跃 `/goal` 与所有 ForceSmart 子代理
 会直接从 promoted 阶段完整放行，
 因此 `exit_plan_mode`、goal、subagent 和 workflow 不会失去退出/控制路径。ForceSmart 不
 检查或限制模型 ID：非 V4 Pro 模型静默可用，但当前实验调校证据主要来自正式版
@@ -208,6 +218,7 @@ Profile 模式不再使用旧的 `DSH_TUI_COMPACT_RATIO`、
 | `DSH_TUI_PRESET` | 覆盖新会话默认 Agent preset |
 | `DSH_TUI_SMART` | `1`/`0`：覆盖新会话 Smart 增强默认值 |
 | `DSH_TUI_FORCE_SMART` | `1`/`0`：覆盖新会话 ForceSmart 增强默认值 |
+| `DSH_TUI_FORCE_SMART_BASH_PATH` | Windows 可选：ForceSmart 首轮使用的 Git Bash `bash.exe` 绝对路径 |
 | `DSH_SMART_RUNTIME_PATH` | Smart 可选 host runtime 包目录或 `lib/index.js` 路径 |
 | `DSH_TUI_THEME` | 锁定内置（`auto`/`light`/`dark`/`dark-ansi`）或自定义主题，优先于持久化选择 |
 | `DSH_TUI_DISABLE_MOUSE` | 在 fullscreen 模式临时关闭鼠标处理 |

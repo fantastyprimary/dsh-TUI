@@ -29,12 +29,19 @@ const testHome = mkdtempSync(join(tmpdir(), 'dsh-tui-smart-request-'))
 const workspace = join(testHome, 'workspace')
 mkdirSync(workspace)
 
-const isolatedEnvironment = ['HOME', 'USERPROFILE', 'DSH_HOME', 'DSH_SMART_RUNTIME_PATH']
+const isolatedEnvironment = [
+  'HOME',
+  'USERPROFILE',
+  'DSH_HOME',
+  'DSH_SMART_RUNTIME_PATH',
+  'DSH_TUI_FORCE_SMART_BASH_PATH',
+]
 const originalEnvironment = new Map(isolatedEnvironment.map(name => [name, process.env[name]]))
 process.env.HOME = testHome
 process.env.USERPROFILE = testHome
 process.env.DSH_HOME = join(testHome, '.dsh')
 delete process.env.DSH_SMART_RUNTIME_PATH
+delete process.env.DSH_TUI_FORCE_SMART_BASH_PATH
 
 let failed = 0
 let rootContext
@@ -301,6 +308,10 @@ try {
   rootContext.provide('loader', Object.freeze({}))
   rootContext.provide('timer', Object.freeze({}))
   rootContext.provide('fs', Object.freeze({ sandboxMode: undefined }))
+  rootContext.provide('subprocess', Object.freeze({
+    async resolveExecutable(candidate) { return candidate },
+    spawn() { throw new Error('request verifier must not execute the Windows bootstrap shell') },
+  }))
   await rootContext.plugin(LlmRuntime)
   await rootContext.plugin(SessionStore)
   await rootContext.plugin(SystemPrompt, { persona: 'Host persona that Standard shadows.' })

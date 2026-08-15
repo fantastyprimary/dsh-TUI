@@ -14,5 +14,12 @@ where possible and may mount the official DSH implementations only for a
 top-level agent; child scopes never gain tools. The pinned Anchored main has no
 default output cap, while ForceSmart deliberately keeps the fixed reference
 composition's 1024 bootstrap budget and trajectory gate.
+
+On native Windows, ForceSmart adapts Anchored Standard's custom-bash approach:
+an agent-scoped tool resolves Git Bash and executes `bash -c` through DSH's
+subprocess service because the official persistent PTY backend is not available
+on win32. Each Windows call is a fresh shell and has no OS sandbox confinement;
+the full base preset, including pwsh, returns after promotion. WSL2 is treated
+as Linux and continues to use DSH's persistent Bash backend.
 These implementation sources are attribution and design references only; the
 product, command, and UI name is ForceSmart.

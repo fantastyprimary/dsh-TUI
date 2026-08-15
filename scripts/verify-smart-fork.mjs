@@ -521,7 +521,7 @@ try {
     'ForceSmart on: setup mounts exactly one ForceSmart overlay after Standard',
     same(forceCreation.agentCtx.pluginCalls.map(call => call.name), [
       ...(process.platform === 'win32'
-        ? []
+        ? ['dsh-tui-force-smart-windows-bash']
         : ['TerminalSessionService', 'terminal-bash', 'tool-bash-persistent']),
       'tool-str-replace-editor',
       'dsh-tui-force-smart-marker',

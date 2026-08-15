@@ -27,13 +27,16 @@
     },
     "files": {
       "LICENSE": "f378a902991032962a07bcabdf8bc6b4dad65b3a1fd06ed66cc2d61faaf3a32e",
-      "NOTICE": "72fe93834e2d0b873727b2a15a577623100f14731da1d1ffb2fad792400be8a6",
-      "force-bootstrap.mjs": "813d9d411736969358292cac483e12d4a4adaa1cbb5c632d4e232d1d62755b86"
+      "NOTICE": "74eea21221f75cf7da65adfd951790ac573f8230efaf4fc80214e9b1f5b717ee",
+      "force-bootstrap.mjs": "813d9d411736969358292cac483e12d4a4adaa1cbb5c632d4e232d1d62755b86",
+      "windows-bash.mjs": "e467a8a79150f9b9b5ff82b07feb546b4e7de25eb1282b2713e61374e2f04414"
     },
     "localDecisions": [
       "ForceSmart remains an overlay over the selected official or custom preset.",
       "A compatible clean request uses the exact Minimal persona and model-facing Bash/editor schemas.",
       "The pinned reference composition's 1024 bootstrap budget and anchored trajectory gate are retained.",
+      "Native Windows uses an agent-scoped Git Bash executor for the Minimal-shaped first request, then restores the base preset including pwsh; WSL2 follows the Linux persistent-Bash path.",
+      "The Windows executor uses a fresh process without OS sandbox confinement and fails open when Git Bash cannot be resolved.",
       "Active plan/goal state fails open with the complete base surface.",
       "Child scopes never receive enhancement-owned tools and start promoted to protect one-shot delegated tasks."
     ]

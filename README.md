@@ -154,7 +154,10 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
   自动关闭另一个；prompt、context、工具、route、工作目录和历史会重新组装，不会向
   官方 preset 名册加入第五种模式。Smart 内部按模型选择 Router Standard/Router Pro；
   Smart 与 ForceSmart 的首轮控制都参考 Anchored；ForceSmart 是其增强的唯一产品名，
-  固定提交中的“梁神模式”仅为机制来源，不作为别名或界面名称。
+  固定提交中的“梁神模式”仅为机制来源，不作为别名或界面名称。Smart 在 Windows
+  使用 `pwsh`、在 WSL2/Linux/macOS 使用 `bash`；ForceSmart 在原生 Windows 用真实
+  Git Bash 完成 Minimal 双工具首轮并在晋升后恢复 `pwsh`，其他三类环境使用官方
+  persistent Bash。
   `/plan`、`/goal` 和原生 spawn/fork/continuable 子代理保留权限、上下文与工具边界。
   `/preset` 仍只允许空白会话切换。preset 和两个增强的默认值分别保存在
   `~/.dsh-tui/agent-preset.json`、`smart.json`、`force-smart.json`；`/model` 的选择

@@ -6,6 +6,12 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { apply } from '../force-smart-assets/force-bootstrap.mjs'
+import {
+  apply as applyWindowsBash,
+  isWindowsSubsystemLauncher,
+  resolveWindowsBash,
+  windowsBashCandidates,
+} from '../force-smart-assets/windows-bash.mjs'
 
 const BOOTSTRAP_MAX_TOKENS = 1024
 const assetRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'force-smart-assets')
@@ -27,6 +33,130 @@ test('ForceSmart provenance and asset hashes remain pinned', () => {
     const actual = createHash('sha256').update(readFileSync(join(assetRoot, file))).digest('hex')
     assert.equal(actual, expected, file)
   }
+})
+
+test('Windows Bash discovery prefers Git installations and permits an explicit override', () => {
+  const environment = {
+    ProgramFiles: String.raw`C:\Program Files`,
+    'ProgramFiles(x86)': String.raw`C:\Program Files (x86)`,
+    LOCALAPPDATA: String.raw`C:\Users\tester\AppData\Local`,
+  }
+  assert.deepEqual(windowsBashCandidates({}, environment), [
+    String.raw`C:\Program Files\Git\bin\bash.exe`,
+    String.raw`C:\Program Files\Git\usr\bin\bash.exe`,
+    String.raw`C:\Program Files (x86)\Git\bin\bash.exe`,
+    String.raw`C:\Program Files (x86)\Git\usr\bin\bash.exe`,
+    String.raw`C:\Users\tester\AppData\Local\Programs\Git\bin\bash.exe`,
+    String.raw`C:\Users\tester\AppData\Local\Programs\Git\usr\bin\bash.exe`,
+    'bash',
+  ])
+  assert.deepEqual(
+    windowsBashCandidates({ bashPath: String.raw`D:\PortableGit\bin\bash.exe` }, environment),
+    [String.raw`D:\PortableGit\bin\bash.exe`],
+  )
+})
+
+test('Windows Bash discovery rejects the WSL launcher and continues to Git Bash', async () => {
+  const attempts = []
+  const subprocess = {
+    async resolveExecutable(candidate) {
+      attempts.push(candidate)
+      if (candidate.endsWith(String.raw`Git\bin\bash.exe`)) {
+        return String.raw`C:\Windows\System32\bash.exe`
+      }
+      if (candidate.endsWith(String.raw`Git\usr\bin\bash.exe`)) return candidate
+      throw new Error('missing')
+    },
+  }
+  const resolved = await resolveWindowsBash(subprocess, {}, {
+    ProgramFiles: String.raw`C:\Program Files`,
+  })
+  assert.equal(resolved, String.raw`C:\Program Files\Git\usr\bin\bash.exe`)
+  assert.deepEqual(attempts, [
+    String.raw`C:\Program Files\Git\bin\bash.exe`,
+    String.raw`C:\Program Files\Git\usr\bin\bash.exe`,
+  ])
+  assert.equal(isWindowsSubsystemLauncher(String.raw`C:\Windows\System32\bash.exe`), true)
+  assert.equal(isWindowsSubsystemLauncher(String.raw`C:\Program Files\Git\bin\bash.exe`), false)
+})
+
+test('Windows Bash is a real bash -c executor scoped to the session cwd', async () => {
+  let definition
+  let spawnSpec
+  const signal = new AbortController().signal
+  const ctx = {
+    subprocess: {
+      async resolveExecutable(candidate) {
+        assert.equal(candidate, String.raw`D:\Git\bin\bash.exe`)
+        return candidate
+      },
+      spawn(spec) {
+        spawnSpec = spec
+        return {
+          done: Promise.resolve({ exitCode: 0, signal: null }),
+          collected: {
+            stdout: { readFrom: () => ({ text: 'stdout', nextOffset: 6, lossy: false }) },
+            stderr: { readFrom: () => ({ text: 'stderr', nextOffset: 6, lossy: false }) },
+          },
+        }
+      },
+    },
+    tools: {
+      register(value) { definition = value },
+    },
+  }
+  await applyWindowsBash(ctx, {
+    bashPath: String.raw`D:\Git\bin\bash.exe`,
+    timeoutMs: 123_000,
+    maxOutputBytes: 12_345,
+  })
+  assert.equal(definition.name, 'bash')
+  assert.match(definition.description, /Git Bash on Windows/)
+  assert.match(definition.description, /without OS sandbox confinement/)
+  assert.equal(definition.timeoutMs, 123_000)
+  assert.deepEqual(definition.parameters, {
+    command: {
+      type: 'string',
+      required: true,
+      description: 'The bash command to run. Relative path is preferred in the command.',
+    },
+  })
+
+  const result = await definition.execute(
+    { command: 'printf test' },
+    {
+      signal,
+      agent: { session: { header: { cwd: String.raw`C:\workspace` } } },
+    },
+  )
+  assert.deepEqual(result, { text: 'stdout\nstderr' })
+  assert.deepEqual(spawnSpec, {
+    argv: [String.raw`D:\Git\bin\bash.exe`, '-c', 'printf test'],
+    cwd: String.raw`C:\workspace`,
+    stdio: {
+      stdin: 'ignore',
+      stdout: { maxBytes: 12_345 },
+      stderr: { maxBytes: 12_345 },
+    },
+    graceMs: 3_000,
+    signal,
+  })
+})
+
+test('Windows Bash fails before registration when no real executor exists', async () => {
+  let registered = false
+  await assert.rejects(
+    applyWindowsBash({
+      subprocess: {
+        async resolveExecutable() { throw new Error('not found') },
+      },
+      tools: {
+        register() { registered = true },
+      },
+    }, { bashPath: String.raw`Z:\missing\bash.exe` }),
+    /Git Bash executable unavailable/,
+  )
+  assert.equal(registered, false)
 })
 
 function createHarness({ id = 'force-smart', seedLength = 0, config = {}, ...header } = {}) {

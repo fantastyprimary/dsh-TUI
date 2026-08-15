@@ -16,25 +16,40 @@ type ForceBootstrapModule = {
   readonly apply: (ctx: Context, config: { readonly ownedTools?: readonly string[] }) => unknown
 }
 
-let bootstrapModule: Promise<ForceBootstrapModule> | undefined
+type WindowsBashModule = {
+  readonly apply: (ctx: Context, config: {
+    readonly bashPath?: string
+    readonly timeoutMs?: number
+    readonly maxOutputBytes?: number
+  }) => unknown
+}
 
-function bootstrapEntry(): string {
+let bootstrapModule: Promise<ForceBootstrapModule> | undefined
+let windowsBashModule: Promise<WindowsBashModule> | undefined
+
+function assetEntry(file: string): string {
   const moduleDir = dirname(fileURLToPath(import.meta.url))
   const candidates = [
-    join(moduleDir, '..', '..', 'force-smart-assets', 'force-bootstrap.mjs'),
-    join(moduleDir, '..', 'force-smart-assets', 'force-bootstrap.mjs'),
+    join(moduleDir, '..', '..', 'force-smart-assets', file),
+    join(moduleDir, '..', 'force-smart-assets', file),
   ]
   const found = candidates.find(existsSync)
-  if (found === undefined) throw new Error('dsh-tui ForceSmart bootstrap asset is missing')
+  if (found === undefined) throw new Error(`dsh-tui ForceSmart asset is missing: ${file}`)
   return found
 }
 
 async function loadBootstrap(): Promise<ForceBootstrapModule> {
-  bootstrapModule ??= import(pathToFileURL(bootstrapEntry()).href) as Promise<ForceBootstrapModule>
+  bootstrapModule ??= import(pathToFileURL(assetEntry('force-bootstrap.mjs')).href) as Promise<ForceBootstrapModule>
   return await bootstrapModule
 }
 
+async function loadWindowsBash(): Promise<WindowsBashModule> {
+  windowsBashModule ??= import(pathToFileURL(assetEntry('windows-bash.mjs')).href) as Promise<WindowsBashModule>
+  return await windowsBashModule
+}
+
 async function mountMinimalTools(
+  hostCtx: Context,
   agentCtx: Context,
   bashDescription: string,
   allowAdditions: boolean,
@@ -44,19 +59,38 @@ async function mountMinimalTools(
   const hasEditor = agentCtx.tools.get('str_replace_editor', agent) !== undefined
   const ownedTools: string[] = []
 
-  // The official persistent PTY backend is Linux/macOS-only. Windows remains
-  // fail-open unless the selected base preset already provides a real bash;
-  // publishing a bash schema backed by pwsh would be a broken capability.
-  if (allowAdditions && !hasBash && process.platform !== 'win32') {
-    const shellCtx = agentCtx.isolate('terminals')
-    await shellCtx.plugin(TerminalSessionService)
-    await shellCtx.plugin(TerminalBash, { timeoutMs: 300_000 })
-    await shellCtx.plugin(PersistentBash, {
-      timeoutMs: 300_000,
-      maxOutputChars: 16_000,
-      description: bashDescription,
-    })
-    ownedTools.push('bash')
+  if (allowAdditions && !hasBash) {
+    if (process.platform === 'win32') {
+      try {
+        const windowsBash = await loadWindowsBash()
+        await agentCtx.plugin(windowsBash as unknown as {
+          apply(ctx: Context, config: {
+            readonly bashPath?: string
+            readonly timeoutMs?: number
+            readonly maxOutputBytes?: number
+          }): unknown
+        }, {
+          bashPath: process.env.DSH_TUI_FORCE_SMART_BASH_PATH,
+          timeoutMs: 300_000,
+          maxOutputBytes: 64_000,
+        })
+        ownedTools.push('bash')
+      } catch (error) {
+        hostCtx.logger.warn(
+          `dsh-tui ForceSmart: Windows Git Bash bootstrap unavailable; using the complete base preset (${error instanceof Error ? error.message : String(error)})`,
+        )
+      }
+    } else {
+      const shellCtx = agentCtx.isolate('terminals')
+      await shellCtx.plugin(TerminalSessionService)
+      await shellCtx.plugin(TerminalBash, { timeoutMs: 300_000 })
+      await shellCtx.plugin(PersistentBash, {
+        timeoutMs: 300_000,
+        maxOutputChars: 16_000,
+        description: bashDescription,
+      })
+      ownedTools.push('bash')
+    }
   }
   if (allowAdditions && !hasEditor) {
     await agentCtx.plugin(StrReplaceEditor, { maxOutputChars: 16_000 })
@@ -93,6 +127,7 @@ export async function mountForceSmartEnhancement(
   // Code owns a collapsed run_code presentation. Adding native tools behind
   // that transport would silently change its generated SDK, so it fails open.
   const ownedTools = await mountMinimalTools(
+    hostCtx,
     agentCtx,
     bootstrap.MINIMAL_BASH_SCHEMA.description,
     basePreset !== 'code',

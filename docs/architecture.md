@@ -127,6 +127,10 @@ answerer（`approval/request` waterfall），仅允许一次/拒绝两种决定�
   新增工具，且保留 persona 与 delegation/sandbox/approval contexts。Smart 在既有
   权限目录内路由；ForceSmart 子代理直接从 promoted 阶段开始，避免一次性委托被
   bootstrap 上限截断。晋升后恢复基础 preset 的 subagent/workflow/skill 工具与 contexts。
+- 平台 shell 保持真实能力边界：Smart 在 win32 选择 `pwsh`，在 WSL2/Linux/macOS
+  选择 `bash`；ForceSmart 的 win32 顶层 bootstrap 使用 agent-scoped Git Bash adapter，
+  其余平台使用 DSH persistent Bash。晋升后恢复基础 preset 目录，Windows 再次看到
+  `pwsh`；Git Bash 不可用时告警并 fail-open。
 - `Ctrl+V` 读剪贴板按平台分派：Windows 用 PowerShell `Get-Clipboard`（剪贴板被
   其他程序锁定时重试后可能静默失败并显示为空）；macOS 用 `osascript`/`pbpaste`；
   Linux/Unix 按会话顺序尝试 `wl-paste`/`xclip`/`xsel`（工具缺失跳过、会话

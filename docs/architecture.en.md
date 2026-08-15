@@ -151,6 +151,11 @@ visual TUI alone does not describe the effective policy.
   existing catalog; ForceSmart children start promoted so one-shot delegation
   is never trapped under the bootstrap cap. Promotion restores the base
   subagent, workflow, skill, context, and tool surfaces.
+- Platform shells preserve their real capability boundary: Smart selects
+  `pwsh` on win32 and `bash` on WSL2, Linux, and macOS. A top-level ForceSmart
+  bootstrap uses an agent-scoped Git Bash adapter on win32 and DSH persistent
+  Bash elsewhere. Promotion restores the base catalog, including `pwsh` on
+  Windows; unavailable Git Bash warns and fails open.
 - `Ctrl+V` clipboard reads dispatch per platform: PowerShell `Get-Clipboard` on
   Windows (a competing process can lock the clipboard and make the read appear
   empty after retries), `osascript`/`pbpaste` on macOS, and the first usable of
