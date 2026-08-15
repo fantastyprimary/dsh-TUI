@@ -103,6 +103,19 @@ For migration from the former `dsh-cc-tui` package and `cc-tui` profile, see
 
 The complete bilingual index is [`docs/README.md`](docs/README.md).
 
+## Configuration and extensions
+
+- **Agent presets and Smart**: `/preset` still selects one of the four official
+  Agent modes. `/smart` independently overlays Smart, based on
+  `dsh-routing-suite`, on that preset. A Smart switch forks and preserves the
+  conversation while rebuilding prompt, context, tools, and services; Smart
+  never becomes a fifth roster preset. See
+  [Configuration](docs/configuration.en.md#agent-presets).
+- **Custom themes**: `/theme` selects a built-in or JSON theme from
+  `~/.dsh-cc/themes/`. See [Themes](docs/themes.en.md).
+- **MCP**: mount servers through `@deepseek-ai/dsh-mcp-client`; `/mcp` reports
+  connection state. See [Configuration](docs/configuration.en.md#mcp).
+
 ## How It Works
 
 ```text

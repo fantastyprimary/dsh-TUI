@@ -209,7 +209,7 @@ TypeScript 源的脚本在头部声明 `node --import tsx/esm <script>` 形式�
   推进、订阅者被通知。
 - 保持长会话内存有界。不要在没有实测替代方案时移除 transcript 折叠、回放
   合并、虚拟化或缓存上限。
-- resume、rewind、模型切换、preset 切换等 Agent 变更必须一起重置所有会话级
+- resume、rewind、模型切换、preset/Smart 切换等 Agent 变更必须一起重置所有会话级
   投影。审计行、goals、todos、标题、pending 消息、指标与已加载上下文的陈旧
   状态。
 - 通过已挂载的 DSH 服务与注册表解析 agent/model/tool/preset 能力。不要猜测

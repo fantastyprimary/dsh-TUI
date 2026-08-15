@@ -105,7 +105,12 @@ prompt + 已有历史）做一次**无工具、单轮**的模型调用，答案�
 旧会话仍保留在 `/resume` 中。
 
 `/preset` 只允许空白会话原地切换。已经开始的会话会把选择保存为下一次 `/new`
-或启动时的默认值。详细规则见[配置参考](configuration.md#agent-preset)。
+或启动时的默认值。
+
+`/smart on|off` 是独立于 preset 的增强开关。它始终通过 fork 切换：新 agent 保留
+当前对话，继续使用同一个基础 preset，但会按目标 Smart 状态重新组装 prompt、
+context、工具和相关服务；旧会话仍在 `/resume`。详细规则见
+[配置参考](configuration.md#smart-增强)。
 
 ## Fullscreen 与鼠标
 

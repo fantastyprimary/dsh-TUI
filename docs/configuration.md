@@ -53,6 +53,7 @@ Profile 启动按顺序叠加 `dsh-base`、已安装 bundle、`@deepseek-harness
 | `contextBar` | `true` | 输入框下方的分段上下文进度条；`false` 隐藏该行 |
 | `fullscreen` | `false` | `true` 使用 alternate screen、应用内滚动和鼠标选区；`false` 使用 inline 模式 |
 | `preset` | 名册默认 `standard` | 新会话 Agent preset；显式配置优先于持久化偏好 |
+| `smart` | 持久化选择或 `false` | 在所选 Agent preset 上启用 Smart 增强 |
 | `sessionId` | 未设置 | 要恢复的会话 ID，通常由 Windows `--resume` 启动器注入 |
 
 ## 工作状态行
@@ -89,6 +90,29 @@ Profile 启动按顺序叠加 `dsh-base`、已安装 bundle、`@deepseek-harness
 - 优先级为：显式 `config.preset` 或 `CC_TUI_PRESET`，然后持久化偏好，最后名册
   默认值 `standard`。
 - 恢复旧会话时，以该会话日志记录的 preset 为准，不读取当前默认值覆盖它。
+
+
+### Smart 增强
+
+Smart 不是第五个 Agent preset，而是叠加在 `standard`、`code`、`minimal`、
+`cordis` 或用户 preset 上的正交增强：`/preset` 决定基础能力，`/smart on|off`
+决定是否启用 Smart。运行时切换会在当前历史末尾 fork；对话消息保持不变，
+目标 agent 会重新组装 agent-scoped system prompt、动态 context、工具 schema 和相关
+服务，旧会话仍可在 `/resume` 恢复。`smart: true` 或 `CC_TUI_SMART=1` 可让新会话
+启动即启用。
+
+Smart 基于 `dsh-routing-suite`，内置其固定的 Router Standard v0.2.0。它的首轮
+Standard RL prompt/context 与工具面只在基础 preset 为 `standard` 时启用；其他
+preset 保留自己的完整工具目录，同时使用任务分类、persona、near-field 引导和
+router 管理工具。Standard 的 Smart 首轮会额外挂载 v0.2.0 所需的
+`str_replace_editor`。Super Injector v0.3.3 因上游发布物缺少 LICENSE/NOTICE 文件
+而不随包再分发；若官方 payload 已安装在当前或 `web` profile，
+Smart 会校验版本与 host bundle SHA-256 后挂载完整上游 host 工具。也可用
+`DSH_SMART_RUNTIME_PATH` 指向该包目录。TUI 兼容层不启动 Web 服务，因此上游浏览器
+设置面板不可用。可选 host 一旦激活，其 restore/watch 以及动态插件产生的 route、timer、
+service 和其他副作用可能是进程级；`/smart off` 会移除 agent-scoped Smart prompt/Router，
+并隐藏已知 host 管理工具与 context，但不会卸载任意已注入插件。完全隔离需要使用独立
+进程/profile；关闭已激活 host 的全部进程级行为需要重启当前进程。
 
 自定义 preset 放在 `$DSH_HOME/.agent-presets/<name>/`，目录中应包含
 `agent.cordis.yml`。默认 `DSH_HOME` 下的路径即 `~/.dsh/.agent-presets/`。
@@ -136,6 +160,8 @@ Profile 模式不再使用旧的 `CC_TUI_COMPACT_RATIO`、
 | `DEEPSEEK_BASE_URL` | 覆盖 DeepSeek 兼容 API 端点 |
 | `CC_TUI_PERSONA` | 覆盖组合注入的 Agent persona |
 | `CC_TUI_PRESET` | 覆盖新会话默认 Agent preset |
+| `CC_TUI_SMART` | `1`/`0`：覆盖新会话 Smart 增强默认值 |
+| `DSH_SMART_RUNTIME_PATH` | Smart 可选 host runtime 包目录或 `lib/index.js` 路径 |
 | `CC_TUI_THEME` | 锁定内置或自定义主题，优先于持久化选择 |
 | `CC_TUI_DISABLE_MOUSE` | 在 fullscreen 模式临时关闭鼠标处理 |
 | `DSH_CC_RESUME_SESSION` | 启动时恢复指定会话，通常由启动器设置 |

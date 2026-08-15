@@ -147,9 +147,12 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 
 ## 配置与扩展
 
-- **Agent preset**：四种官方 Agent 模式（`standard` / `code` / `minimal` / `cordis`），
-  `/preset` 切换；已产生对话的会话不可切换，空白会话立即生效。默认 preset 持久化
-  在 `~/.dsh-cc/agent-preset.json`；`/model` 的选择持久化在 `~/.dsh-cc/model.json`。
+- **Agent preset 与 Smart**：四种官方 Agent 模式仍由 `/preset` 选择；`/smart`
+  是叠加在当前 preset 上、基于 `dsh-routing-suite` 的 Smart 增强。切换 Smart
+  时会 fork 保留对话，并完整重组 prompt、context 与工具，不会向官方 preset 名册
+  加入第五种模式。
+  preset 默认值保存在 `~/.dsh-cc/agent-preset.json`，Smart 默认值保存在
+  `~/.dsh-cc/smart.json`，`/model` 的选择保存在 `~/.dsh-cc/model.json`。
   详见[配置参考](docs/configuration.md#agent-preset)。
 - **自定义主题**：`/theme` 选择器（内置 `light` / `dark` / `dark-ansi`），也支持
   `~/.dsh-cc/themes/<名字>.json` 自定义主题，选中即热切换并持久化；

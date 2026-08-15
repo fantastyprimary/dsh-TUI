@@ -127,6 +127,10 @@ visual TUI alone does not describe the effective policy.
   separate UI segment; it is included in the system/context meter.
 - `/model` switches through a session fork rather than an in-place update; the
   old session remains in `/resume`.
+- `/smart` switches the independent enhancement through a fork. The child
+  keeps the derived conversation surface, while its new `request/header` is
+  fully assembled from the base preset plus Smart overlay; old header events
+  never become messages.
 - Windows `Ctrl+V` depends on PowerShell `Get-Clipboard`; another process can
   lock the clipboard and make the operation appear empty.
 - Exit restores the terminal and ends the process without waiting for the

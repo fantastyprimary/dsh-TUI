@@ -109,6 +109,9 @@ answerer（`approval/request` waterfall），仅允许一次/拒绝两种决定�
 - 注入到 system prompt 的插件上下文不会在 UI 中单独列出，而是计入 system/context
   分段。
 - `/model` 通过 session fork 切换，不是原位修改；旧会话会留在 `/resume`。
+- `/smart` 通过 fork 切换独立增强层。子会话只继承可派生的对话面，新的
+  `request/header` 由基础 preset + Smart overlay 全量组装；旧 header 事件不会
+  变成模型消息。
 - Windows `Ctrl+V` 依赖 PowerShell `Get-Clipboard`；剪贴板被其他程序锁定时可能静默
   失败并显示为空。
 - 退出路径优先恢复终端并结束进程，不等待 Agent 异步落盘；持久化插件负责兜底。

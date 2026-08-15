@@ -114,8 +114,13 @@ answer in a scrollable panel. Notes:
 DSH has no in-place model-switch API. The old session remains in `/resume`.
 
 `/preset` switches in place only for a blank session. In a started session,
-the choice becomes the default for the next `/new` or launch. See
-[Configuration](configuration.en.md#agent-presets).
+the choice becomes the default for the next `/new` or launch.
+
+`/smart on|off` is independent of the preset and always switches through a
+fork. The replacement agent preserves the conversation and base preset while
+reassembling prompt, context, tools, and services for the target Smart state;
+the old session remains in `/resume`. See
+[Configuration](configuration.en.md#smart-enhancement).
 
 ## Fullscreen and mouse
 

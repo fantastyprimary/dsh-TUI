@@ -55,6 +55,7 @@ A complete common override looks like this:
 | `contextBar` | `true` | Segmented context-usage bar below the input box; `false` hides the row |
 | `fullscreen` | `false` | `true` uses the alternate screen, app scrolling, and mouse selection; `false` uses inline mode |
 | `preset` | roster default `standard` | Agent preset for new sessions; explicit configuration wins over persisted preference |
+| `smart` | persisted choice or `false` | Enable Smart over the selected Agent preset |
 | `sessionId` | unset | Session to resume, normally injected by the Windows `--resume` launcher |
 
 ## Live activity row
@@ -95,6 +96,36 @@ Usage rules:
   preference, then the roster default `standard`.
 - Resuming a session restores the preset recorded in that session's log and
   does not overwrite it with the current default.
+
+
+### Smart enhancement
+
+Smart is not a fifth Agent preset. It is an orthogonal enhancement over
+`standard`, `code`, `minimal`, `cordis`, or a user preset: `/preset` chooses
+the base capability and `/smart on|off` controls Smart. Runtime switches
+fork at the end of the current history. Messages are preserved while the
+target agent reassembles its agent-scoped system prompt, dynamic context, tool
+schemas, and services; the old session remains available through `/resume`. Set
+`smart: true` or `CC_TUI_SMART=1` to enable it for new sessions at startup.
+
+Smart is based on `dsh-routing-suite` and bundles its pinned Router Standard
+v0.2.0. Its Standard-specific first-request RL prompt/context and tool surface
+run only over the `standard` base preset; other presets retain their complete
+native catalogs while gaining task classification, persona, near-field
+guidance, and router management tools. Smart also mounts the
+`str_replace_editor` required by v0.2.0 for Standard's first request. Super
+Injector v0.3.3 is not redistributed because its upstream release declares
+BSD-3-Clause but includes no LICENSE/NOTICE artifact. When the official payload
+is already installed in the active or `web` profile, Smart verifies its version and host-bundle SHA-256
+before mounting the complete upstream host tool set. `DSH_SMART_RUNTIME_PATH`
+may point to that package directory. The terminal compatibility layer does not
+start a web server, so the upstream browser settings panel is unavailable.
+Once the optional host is active, its restore/watch loop and routes, timers,
+services, or other side effects from dynamically loaded plugins may remain
+process-global. `/smart off` removes the agent-scoped Smart prompt and Router
+and hides known host management tools and context, but it does not unload
+arbitrary injected plugins. Full isolation requires a separate process/profile;
+stopping all activated host behavior requires restarting the current process.
 
 Place a custom preset at `$DSH_HOME/.agent-presets/<name>/` with an
 `agent.cordis.yml` file. Under the default DSH home this is
@@ -145,6 +176,8 @@ for the complete field reference.
 | `DEEPSEEK_BASE_URL` | Override the compatible DeepSeek API endpoint |
 | `CC_TUI_PERSONA` | Override the Agent persona injected by the composition |
 | `CC_TUI_PRESET` | Override the default Agent preset for new sessions |
+| `CC_TUI_SMART` | `1`/`0`: override the Smart enhancement default for new sessions |
+| `DSH_SMART_RUNTIME_PATH` | Optional Smart host runtime package directory or `lib/index.js` path |
 | `CC_TUI_THEME` | Pin a built-in or custom theme ahead of persisted selection |
 | `CC_TUI_DISABLE_MOUSE` | Temporarily disable mouse handling in fullscreen mode |
 | `DSH_CC_RESUME_SESSION` | Resume a session at startup, normally set by a launcher |

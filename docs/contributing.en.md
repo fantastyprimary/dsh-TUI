@@ -41,7 +41,7 @@ boundaries and helpers over introducing parallel abstractions.
   React tree mounting, and terminal/process teardown.
 - `src/channel.ts`: event-to-view projection and the non-React action surface.
   It translates DSH session events into transcript rows and implements submit,
-  steering, rewind, resume, model/preset switching, local reports, and related
+  steering, rewind, resume, model/preset/Smart switching, local reports, and related
   state transitions.
 - `src/screens/Chat.tsx`: top-level interaction coordinator. It owns modal
   precedence, global keyboard handling, scroll/search/selection state, slash
@@ -272,7 +272,7 @@ the required credentials.
   frame-coalesced emitter so `version` advances and subscribers are notified.
 - Keep long-session memory bounded. Do not remove transcript folding, replay
   coalescing, virtualization, or cache limits without a measured replacement.
-- Agent changes such as resume, rewind, model switch, and preset switch must
+- Agent changes such as resume, rewind, model switch, and preset/Smart switch must
   reset all session-scoped projections together. Audit rows, goals, todos,
   titles, pending messages, metrics, and loaded context for stale state.
 - Resolve agent/model/tool/preset capabilities through the mounted DSH
