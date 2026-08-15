@@ -29,8 +29,16 @@
       "types": "./lib/types/working-activity.d.ts",
       "import": "./lib/types/working-activity.js"
     },
+    "./workspaces": {
+      "types": "./lib/types/workspaces.d.ts",
+      "import": "./lib/types/workspaces.js"
+    },
+    "./command-trees": {
+      "types": "./lib/types/command-trees.d.ts",
+      "import": "./lib/types/command-trees.js"
+    },
     "./invariant": {
-      "types": "./lib/types/invariant.d.ts",
+      "types": "./lib/types/dsh-adapter/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
@@ -40,6 +48,8 @@
   "files": [
     "bin",
     "lib",
+    "smart-assets",
+    "force-smart-assets",
     "cordis.patch.yml",
     "cordis.yml",
     "force-smart-assets",
@@ -50,9 +60,13 @@
     "node": "^22.19 || >=24"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node --import tsx/esm scripts/verify-adapter-boundary.ts && node --import tsx/esm scripts/verify-upstream-contract.ts && node --import tsx/esm scripts/verify-patch-surface.ts",
     "tui": "node --import tsx/esm scripts/run.ts",
-    "smoke": "node --import tsx/esm scripts/smoke.tsx"
+    "smoke": "node --import tsx/esm scripts/smoke.tsx",
+    "verify:boundary": "node --import tsx/esm scripts/verify-adapter-boundary.ts",
+    "verify:contract": "node --import tsx/esm scripts/verify-upstream-contract.ts",
+    "verify:patch-surface": "node --import tsx/esm scripts/verify-patch-surface.ts",
+    "verify:clipboard-image": "node --import tsx/esm scripts/verify-clipboard-image.ts"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -133,6 +147,7 @@
     "@deepseek-ai/dsh-timeout": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-user-approval": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-web-app": "0.1.0-rc.6",
     "@types/lodash-es": "^4.17.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
@@ -140,7 +155,8 @@
     "@types/semver": "^7.0.0",
     "@xterm/headless": "^6.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "yaml": "^2.9.0"
   },
   "dsh": {
     "bundle": {

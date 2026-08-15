@@ -30,7 +30,7 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { writeFileSync, m
   import('node:path'),
   import('../src/ui.js'),
   import('../src/screens/Chat.js'),
-  import('../src/questions.js'),
+  import('../src/dsh-adapter/questions.js'),
 ])
 
 const COLS = 100
@@ -87,6 +87,7 @@ const channel: any = {
   reasoningEffort: 'max',
   tokens: { input: 1, output: 1 },
   cwd: '/tmp/demo',
+  displayCwd: '/tmp/demo',
   gitBranch: 'main',
   working: false,
   spinnerMode: 'requesting',

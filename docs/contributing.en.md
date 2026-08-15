@@ -35,11 +35,12 @@ boundaries and helpers over introducing parallel abstractions.
 
 ## Repository Map
 
-- `src/index.ts`: public Cordis plugin entry point, configuration schema, and
-  lazy handoff to the runtime plugin.
-- `src/plugin.ts`: TTY validation, service registration, agent creation/resume,
+- `src/index.ts`: public re-export shim only.
+- `src/dsh-adapter/index.ts`: Cordis plugin contract, configuration schema,
+  and lazy handoff to the runtime plugin.
+- `src/dsh-adapter/plugin.ts`: TTY validation, service registration, agent creation/resume,
   React tree mounting, and terminal/process teardown.
-- `src/channel.ts`: event-to-view projection and the non-React action surface.
+- `src/dsh-adapter/channel.ts`: event-to-view projection and the non-React action surface.
   It translates DSH session events into transcript rows and implements submit,
   steering, rewind, resume, model/preset/Smart switching, local reports, and related
   state transitions.
@@ -62,7 +63,7 @@ boundaries and helpers over introducing parallel abstractions.
 - `src/*Prefs.ts`, `src/customTheme.ts`, and `src/sessionHistory.ts`: persisted
   user preferences and local session metadata under `~/.dsh-tui`.
 - `skills/*/SKILL.md`: skills shipped in the npm package and registered by
-  `src/packaged-skills.ts`.
+  `src/dsh-adapter/packaged-skills.ts`.
 - `cordis.patch.yml`: package bundle overlay used by profile installation.
   Ordering, row IDs, disabled host rows, and insert/override semantics matter.
 - `cordis.yml`: full bare-composition example for direct Cordis/DSH startup.
@@ -83,9 +84,10 @@ The central runtime path is:
 ```text
 Cordis config
   -> src/index.ts
-  -> src/plugin.ts
+  -> src/dsh-adapter/index.ts
+  -> src/dsh-adapter/plugin.ts
   -> DSH agent/session services
-  -> src/channel.ts (session events -> Channel snapshot)
+  -> src/dsh-adapter/channel.ts (session events -> Channel snapshot)
   -> src/screens/Chat.tsx
   -> src/components/*
   -> src/ui.ts
@@ -246,7 +248,7 @@ the required credentials.
 
 ### Cordis Lifecycle And Configuration
 
-- Keep `src/index.ts` as the small public plugin contract and `src/plugin.ts`
+- Keep `src/index.ts` as the small public plugin contract and `src/dsh-adapter/plugin.ts`
   as the runtime implementation. Preserve the lazy handoff unless the task
   intentionally changes the plugin-loading contract.
 - Register resources through Cordis and clean them up through `ctx.effect` or
@@ -342,9 +344,9 @@ the required credentials.
 | Plugin config or environment behavior | `src/index.ts`, runtime consumer, `cordis.patch.yml`, `cordis.yml`, `README.md`, `README_EN.md` |
 | Slash commands or shortcuts | `src/commands.ts`, `src/screens/Chat.tsx`, help/input components, both READMEs, relevant skill mapping/tests |
 | Theme contract or persisted theme behavior | `src/theme.ts`, all palettes, theme provider/picker, custom-theme parser, theme verification, both READMEs |
-| Session/channel behavior | `src/channel.ts`, affected UI projections, compiled output, focused channel/replay regression |
+| Session/channel behavior | `src/dsh-adapter/channel.ts`, affected UI projections, compiled output, focused channel/replay regression |
 | Renderer/layout behavior | `src/ink/` or Yoga source, compiled output, CI regressions, focused scroll/resize/PTY probe |
-| Packaged skill | `skills/<name>/SKILL.md`, `src/packaged-skills.ts` assumptions, command prompt/mapping if exposed as a slash command |
+| Packaged skill | `skills/<name>/SKILL.md`, `src/dsh-adapter/packaged-skills.ts` assumptions, command prompt/mapping if exposed as a slash command |
 | User-facing documented behavior | Chinese and English READMEs, plus config comments/help text where applicable |
 | Package version or dependency | `package.json`, `pnpm-lock.yaml`, generated/published artifacts as applicable; do not churn the legacy npm lock incidentally |
 

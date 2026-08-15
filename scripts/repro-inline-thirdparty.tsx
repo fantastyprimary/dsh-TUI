@@ -23,7 +23,7 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { Chat
   import('@xterm/headless'),
   import('../src/ui.js'),
   import('../src/screens/Chat.js'),
-  import('../src/questions.js'),
+  import('../src/dsh-adapter/questions.js'),
 ])
 
 const COLS = 100
@@ -68,7 +68,7 @@ const channel: any = {
   version: 0, rows: [] as any[], status: 'idle', sessionTitle: 'probe', agentId: 'probe',
   model: 'deepseek-v4-flash',
   mode: { plan: false }, reasoningEffort: 'max', tokens: { input: 120, output: 45 },
-  cwd: '/tmp/demo', gitBranch: 'main', working: true, spinnerMode: 'requesting',
+  cwd: '/tmp/demo', displayCwd: '/tmp/demo', gitBranch: 'main', working: true, spinnerMode: 'requesting',
   responseChars: 0, activeToolCount: 0, turnStart: Date.now(), lastUserText: '概览',
   pending: [], commandList: [], notifications: [],
   subscribe(cb: () => void) { listeners.add(cb); return () => listeners.delete(cb) },

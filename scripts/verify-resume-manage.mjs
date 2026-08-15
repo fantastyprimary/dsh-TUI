@@ -34,7 +34,7 @@ process.env.DSH_TUI_SESSION_ROOT = root
 // Import AFTER the env override: the module resolves roots at call time,
 // but keeping the order obvious protects against future module-level reads.
 const { appendSessionTitle, deleteSessionLog, readSessionTitleFromLog } =
-  await import('../lib/types/compat/sessionLog.js')
+  await import('../lib/types/dsh-adapter/compat/sessionLog.js')
 
 const sessionId = '00000000-1111-2222-3333-444444444444'
 const dir = join(root, '--work-space--', sessionId)
@@ -131,7 +131,7 @@ symlinkSync(outside, join(root, 'ws-link'), 'junction')
 assert.equal(deleteSessionLog(linkedId), 'unavailable', 'delete through a symlinked workspace is refused')
 assert.equal(readFileSync(join(outside, 'keep.txt'), 'utf8'), 'do not delete', 'outside data survives the symlink delete')
 assert.equal(existsSync(join(linkedDir, 'session.jsonl.zstd')), true, 'outside session log survives')
-rmSync(join(root, 'ws-link'), { force: true })
+rmSync(join(root, 'ws-link'), { recursive: true, force: true })
 rmSync(outside, { recursive: true, force: true })
 
 rmSync(root, { recursive: true, force: true })

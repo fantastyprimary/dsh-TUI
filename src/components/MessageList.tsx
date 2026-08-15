@@ -1,7 +1,7 @@
 import React from 'react'
 import { t } from '../i18n.js'
 import { Box, Text, useTerminalSize, type ScrollBoxHandle } from '../ui.js'
-import type { ChatRow, ToolRow, ToolCallView, ToolResultView } from '../channel.js'
+import type { ChatRow, ToolRow, ToolCallView, ToolResultView } from '../dsh-adapter/channel.js'
 import type { DOMElement } from '../ink/dom.js'
 import { Divider } from './design-system/Divider.js'
 import { UserPromptMessage } from './messages/UserPromptMessage.js'
@@ -121,6 +121,7 @@ export function MessageList({
   const localRefs = React.useRef(new Map<number, DOMElement>())
   /** Content-space offset of visibleRows[0] (header + dividers), measured. */
   const baseRef = React.useRef<number | null>(null)
+  const measureQueuedRef = React.useRef(false)
   const [, setMeasureTick] = React.useState(0)
   const [, setScrollTick] = React.useState(0)
 
@@ -242,7 +243,15 @@ export function MessageList({
         scrollHandle.setClampBounds(min, Math.max(min, base + mountedBottom - viewport))
       }
     }
-    if (changed) setMeasureTick(t => t + 1)
+    if (changed && !measureQueuedRef.current) {
+      // Layout corrections can cascade for many rows. Yield between commits
+      // so React does not count the valid convergence as nested updates.
+      measureQueuedRef.current = true
+      queueMicrotask(() => {
+        measureQueuedRef.current = false
+        setMeasureTick(t => t + 1)
+      })
+    }
   })
 
   // useCallback: the reference feeds MemoRow's shallow compare; a fresh
@@ -284,6 +293,7 @@ export function MessageList({
               rowId={row.id}
               kind={row.kind}
               text={row.text}
+              executionTarget={row.executionTarget}
               streaming={row.streaming === true}
               durationMs={row.durationMs}
               time={row.time}
@@ -329,6 +339,7 @@ type MemoRowProps = {
   rowId: number
   kind: ChatRow['kind']
   text: string
+  executionTarget: string | undefined
   streaming: boolean
   durationMs: number | undefined
   time: number | undefined
@@ -365,6 +376,7 @@ function TranscriptRow({
   rowId,
   kind,
   text,
+  executionTarget,
   streaming,
   durationMs,
   time,
@@ -527,7 +539,7 @@ function TranscriptRow({
     // `!` mode command echo, like CC's UserBashInputMessage.
       return (
         <Box marginTop={1} backgroundColor={background} ref={ref}>
-          <Text color="bashBorder">! {text}</Text>
+          <Text color="bashBorder">!{executionTarget ? ` [${executionTarget}]` : ''} {text}</Text>
         </Box>
       )
     case 'local-output':

@@ -25,7 +25,7 @@ const [{ PassThrough, Writable }, React, { render }, { Chat }, { QuestionStore }
     import('react'),
     import('../src/ui.js'),
     import('../src/screens/Chat.js'),
-    import('../src/questions.js'),
+    import('../src/dsh-adapter/questions.js'),
     import('@xterm/headless'),
     import('node:fs'),
   ])
@@ -69,6 +69,7 @@ const channel = {
   model: 'deepseek-v4-flash',
   tokens: { input: 120, output: 45 },
   cwd: '/tmp/repro',
+  displayCwd: '/tmp/repro',
   gitBranch: 'main',
   working: true,
   spinnerMode: 'thinking',

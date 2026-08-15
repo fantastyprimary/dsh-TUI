@@ -1,20 +1,31 @@
 import React from 'react'
+import { readFile, unlink } from 'node:fs/promises'
+import { basename } from 'node:path'
 import { t } from '../i18n.js'
 import { Box, Text, useInput, useTerminalSize } from '../ui.js'
 import { useDeclaredCursor } from '../ink/hooks/use-declared-cursor.js'
 import { stringWidth } from '../ink/stringWidth.js'
 import { formatClipboardInsert, readClipboard } from '../utils/clipboard.js'
 import { editInExternalEditor } from '../utils/externalEditor.js'
-import type { Channel } from '../channel.js'
-import { filterCommands, parseCommandName } from '../commands.js'
+import type { Channel } from '../dsh-adapter/channel.js'
+import { parseCommandName } from '../commands.js'
 import { appendHistory } from '../history.js'
 import { mentionAtCaret } from '../utils/mentions.js'
 import { isMod } from '../utils/modifiers.js'
 import { CommandSuggestions } from './CommandSuggestions.js'
 import { FileSuggestions } from './FileSuggestions.js'
 import { HelpMenu } from './HelpMenu.js'
+import { OverlayAbove } from './OverlayAbove.js'
 
 const HISTORY_LIMIT = 50
+
+function clipboardImageMediaType(path: string): 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | undefined {
+  if (/\.png$/iu.test(path)) return 'image/png'
+  if (/\.jpe?g$/iu.test(path)) return 'image/jpeg'
+  if (/\.webp$/iu.test(path)) return 'image/webp'
+  if (/\.gif$/iu.test(path)) return 'image/gif'
+  return undefined
+}
 
 /** Index of the word boundary at or before `cursor` (readline alt+b). */
 function wordBoundaryLeft(text: string, cursor: number): number {
@@ -125,6 +136,10 @@ export function PromptInput({
 }: PromptInputProps) {
   const [value, setValue] = React.useState('')
   const [cursor, setCursor] = React.useState(0)
+  const valueRef = React.useRef(value)
+  const cursorRef = React.useRef(cursor)
+  valueRef.current = value
+  cursorRef.current = cursor
   // Publish the live controller (fresh closure over `value` every render).
   // clear() mirrors the double-tap-Esc clear: text + caret reset.
   React.useEffect(() => {
@@ -178,11 +193,9 @@ export function PromptInput({
       if (escTimerRef.current) clearTimeout(escTimerRef.current)
     }
   }, [])
-  const { columns } = useTerminalSize()
+  const { columns, rows: terminalRows } = useTerminalSize()
 
-  const suggestions = value.startsWith('/')
-    ? filterCommands(value, channel.commandList)
-    : []
+  const suggestions = value.startsWith('/') ? channel.commandCompletions(value) : []
   const overlayOpen =
     suggestions.length > 0 &&
     !helpOpen &&
@@ -369,8 +382,20 @@ export function PromptInput({
   }
 
   const setInput = (next: string, cursorOffset = next.length) => {
+    valueRef.current = next
+    cursorRef.current = Math.max(0, Math.min(cursorOffset, next.length))
     setValue(next)
-    setCursor(Math.max(0, Math.min(cursorOffset, next.length)))
+    setCursor(cursorRef.current)
+  }
+
+  /** Clipboard reads are asynchronous; insert against the latest render so
+   * typing while PowerShell owns the clipboard never gets overwritten. */
+  const insertClipboardAtCaret = (text: string) => {
+    const current = valueRef.current
+    const position = cursorRef.current
+    setInput(current.slice(0, position) + text + current.slice(position), position + text.length)
+    setSelectedCommand(0)
+    setFileSelected(0)
   }
 
   /** Line index of the cursor; -1 when the cursor is at the very end. */
@@ -423,7 +448,7 @@ export function PromptInput({
       setFileSelected(0)
       clipboardBusyRef.current = true
       void readClipboard()
-        .then(content => {
+        .then(async content => {
           if (content === null) {
             channel.notify(t('input-clipboard-empty'), { color: 'warning' })
             return
@@ -433,7 +458,23 @@ export function PromptInput({
             return
           }
           if (content.kind === 'image') {
-            channel.notify(t('input-clipboard-image-saved'), { color: 'success' })
+            const mediaType = clipboardImageMediaType(content.path)
+            if (mediaType !== undefined) {
+              try {
+                const token = await channel.stageImage({
+                  data: new Uint8Array(await readFile(content.path)),
+                  mediaType,
+                  name: basename(content.path),
+                })
+                await unlink(content.path).catch(() => undefined)
+                insertClipboardAtCaret(`${token} `)
+                channel.notify(t('input-image-pasted', { token }), { timeoutMs: 2500 })
+                return
+              } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error)
+                channel.notify(t('input-image-paste-failed', { err: message }), { color: 'warning', timeoutMs: 5000 })
+              }
+            }
           }
           // Insert against the LIVE input state: the read above resolved
           // asynchronously and the user may have typed while waiting.
@@ -506,7 +547,7 @@ export function PromptInput({
       if (overlayOpen) {
         const command = suggestions[selectedCommand]
         if (command) {
-          tryRunCommand(`/${command.name}`)
+          tryRunCommand(command.commandLine)
           return
         }
       }
@@ -546,9 +587,9 @@ export function PromptInput({
       }
       const line = (value + input).trim()
       if (line.startsWith('/')) {
-        const matches = filterCommands(line, channel.commandList)
+        const matches = channel.commandCompletions(line)
         if (matches.length === 1) {
-          tryRunCommand(`/${matches[0]!.name}`)
+          tryRunCommand(matches[0]!.commandLine)
           return
         }
       }
@@ -592,7 +633,7 @@ export function PromptInput({
     }
     if (key.tab && overlayOpen) {
       const command = suggestions[selectedCommand]
-      if (command) setInput(`/${command.name} `)
+      if (command) setInput(command.replacement)
       return
     }
     // Tab while the model is working = queue for AFTER the turn (followup),
@@ -672,22 +713,23 @@ export function PromptInput({
       setCursor(entry.length)
       return
     }
-    if (key.leftArrow) {
-      setCursor(previous => Math.max(0, previous - 1))
-      return
-    }
-    if (key.rightArrow) {
-      setCursor(previous => Math.min(value.length, previous + 1))
-      return
-    }
     if (isMod(key) && key.leftArrow) {
-      // Jump to the previous word boundary (readline alt+b).
+      // Jump to the previous word boundary (readline alt+b). Must precede the
+      // bare-arrow arms: Ctrl+Left arrives as leftArrow + ctrl.
       setCursor(previous => wordBoundaryLeft(value, previous))
       return
     }
     if (isMod(key) && key.rightArrow) {
       // Jump to the next word boundary (readline alt+f).
       setCursor(previous => wordBoundaryRight(value, previous))
+      return
+    }
+    if (key.leftArrow) {
+      setCursor(previous => Math.max(0, previous - 1))
+      return
+    }
+    if (key.rightArrow) {
+      setCursor(previous => Math.min(value.length, previous + 1))
       return
     }
     if (key.backspace) {
@@ -904,8 +946,73 @@ export function PromptInput({
     active: !selectionActive,
   })
 
+  // 浮层整体挂载条件：与内部面板可见条件精确同值。关闭时必须把整个
+  // absolute 浮层移除——渲染器的 absolute-removed 检测只看被移除节点自身
+  // 的 style.position，常驻浮层 + 移除普通子节点不会触发 blit 解毒，被
+  // 覆盖的转录行会留空（见 Chat.tsx dialogOverlayOpen 注释）。
+  const floatersOpen = helpOpen || channel.pending.length > 0 || fileOverlayOpen || overlayOpen
+
   return (
     <Box flexDirection="column" marginTop={1}>
+      {/* 瞬态面板浮层（帮助/队列/补全）：零布局高度、向上覆盖转录尾部，
+          帧高不随面板开关涨落——否则帧顶行会被滚进 scrollback 并在关闭
+          重绘时二次写入（/model 切换多一份启动画的根因，见 OverlayAbove）。 */}
+      {floatersOpen && (
+      <OverlayAbove maxHeight={Math.max(terminalRows - 6, 4)}>
+        {helpOpen && (
+          <Box marginBottom={1}>
+            <HelpMenu commands={channel.commandList} />
+          </Box>
+        )}
+        {channel.pending.length > 0 && (
+          <Box flexDirection="column" paddingLeft={2} paddingBottom={1}>
+            {channel.pending.some(item => item.placement === 'steer') && (
+              <Box flexDirection="column">
+                <Text dimColor>⚡ {t('input-pending-steer-label')}</Text>
+                {channel.pending
+                  .filter(item => item.placement === 'steer')
+                  .map(item => (
+                    <Text key={item.id} dimColor wrap="truncate">
+                      {'  '}↳ {item.text}
+                    </Text>
+                  ))}
+              </Box>
+            )}
+            {channel.pending.some(item => item.placement === 'followup') && (
+              <Box flexDirection="column">
+                <Text dimColor>⏳ {t('input-pending-queue-label')}</Text>
+                {channel.pending
+                  .filter(item => item.placement === 'followup')
+                  .map(item => (
+                    <Text key={item.id} dimColor wrap="truncate">
+                      {'  '}↳ {item.text}
+                    </Text>
+                  ))}
+              </Box>
+            )}
+            <Text dimColor>Alt+↑ {t('input-pending-actions-hint')}</Text>
+          </Box>
+        )}
+        {fileOverlayOpen && (
+          <Box paddingLeft={2} paddingBottom={1}>
+            <FileSuggestions
+              files={fileMatches}
+              selectedIndex={fileSelected}
+              columns={columns}
+            />
+          </Box>
+        )}
+        {overlayOpen && (
+          <Box paddingLeft={2} paddingBottom={1}>
+            <CommandSuggestions
+              commands={suggestions}
+              selectedIndex={selectedCommand}
+              columns={columns}
+            />
+          </Box>
+        )}
+      </OverlayAbove>
+      )}
       {lastNotification && (
         // position=absolute takes zero layout height so the transcript never
         // shifts when a notification appears/disappears; the layer floats one
@@ -930,58 +1037,6 @@ export function PromptInput({
               {lastNotification.text}
             </Text>
           </Box>
-        </Box>
-      )}
-      {helpOpen && (
-        <Box marginBottom={1}>
-          <HelpMenu commands={channel.commandList} />
-        </Box>
-      )}
-      {channel.pending.length > 0 && (
-        <Box flexDirection="column" paddingLeft={2} paddingBottom={1}>
-          {channel.pending.some(item => item.placement === 'steer') && (
-            <Box flexDirection="column">
-              <Text dimColor>⚡ {t('input-pending-steer-label')}</Text>
-              {channel.pending
-                .filter(item => item.placement === 'steer')
-                .map(item => (
-                  <Text key={item.id} dimColor wrap="truncate">
-                    {'  '}↳ {item.text}
-                  </Text>
-                ))}
-            </Box>
-          )}
-          {channel.pending.some(item => item.placement === 'followup') && (
-            <Box flexDirection="column">
-              <Text dimColor>⏳ {t('input-pending-queue-label')}</Text>
-              {channel.pending
-                .filter(item => item.placement === 'followup')
-                .map(item => (
-                  <Text key={item.id} dimColor wrap="truncate">
-                    {'  '}↳ {item.text}
-                  </Text>
-                ))}
-            </Box>
-          )}
-          <Text dimColor>Alt+↑ {t('input-pending-actions-hint')}</Text>
-        </Box>
-      )}
-      {fileOverlayOpen && (
-        <Box paddingLeft={2} paddingBottom={1}>
-          <FileSuggestions
-            files={fileMatches}
-            selectedIndex={fileSelected}
-            columns={columns}
-          />
-        </Box>
-      )}
-      {overlayOpen && (
-        <Box paddingLeft={2} paddingBottom={1}>
-          <CommandSuggestions
-            commands={suggestions}
-            selectedIndex={selectedCommand}
-            columns={columns}
-          />
         </Box>
       )}
       <Box

@@ -8,7 +8,7 @@ import { join } from 'node:path'
 const testHome = mkdtempSync(join(tmpdir(), 'dsh-tui-activity-home-'))
 process.env.HOME = testHome
 process.env.USERPROFILE = testHome
-const { createChannel } = await import('../lib/types/channel.js')
+const { createChannel } = await import('../lib/types/dsh-adapter/channel.js')
 const { apply: applyWorkingActivity } = await import('dsh-working-activity')
 
 // Both shipped compositions explicitly keep persistence disabled.

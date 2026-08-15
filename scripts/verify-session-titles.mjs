@@ -32,7 +32,7 @@ process.env.DSH_TUI_SESSION_ROOT = root
 
 // Import AFTER the env override (root resolves at call time, but keep the
 // order obvious against future module-level reads).
-const { readSessionTitleFromLog } = await import('../lib/types/compat/sessionLog.js')
+const { readSessionTitleFromLog } = await import('../lib/types/dsh-adapter/compat/sessionLog.js')
 
 const writeSession = (sessionId, frames) => {
   const dir = join(root, '--work-space--', sessionId)

@@ -39,7 +39,7 @@ after(() => {
   rmSync(testRoot, { recursive: true, force: true })
 })
 
-const runtime = await import('../lib/types/smartRuntime.js')
+const runtime = await import('../lib/types/dsh-adapter/smartRuntime.js')
 const { SMART_PROMPT_MARKER } = await import('../lib/types/smartPrefs.js')
 const { resolveDshProfileName } = await import('../lib/types/update.js')
 

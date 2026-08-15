@@ -195,7 +195,7 @@ function startedEvents() {
 }
 
 try {
-  const { createChannel } = await import('../lib/types/channel.js')
+  const { createChannel } = await import('../lib/types/dsh-adapter/channel.js')
 
   const services = {}
   const host = makeHostContext(services)

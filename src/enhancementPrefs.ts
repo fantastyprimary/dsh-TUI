@@ -1,8 +1,24 @@
 /** Shared durable preference/sidecar implementation for orthogonal enhancements. */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import { DATA_DIR } from './utils/paths.js'
+
+export interface EnhancementSessionHeader {
+  readonly id: unknown
+  readonly seedLength?: number
+}
+
+export interface EnhancementSessionEvent {
+  readonly type: string
+  readonly seq: number
+  readonly data?: unknown
+}
+
+export interface EnhancementRequestHeader {
+  readonly system?: string
+  readonly config?: { readonly maxTokens?: number }
+  readonly tools?: readonly { readonly name: string }[]
+}
 
 const MAX_SESSION_RECORDS = 512
 
@@ -131,14 +147,19 @@ export function writeEnhancementSession(
   return write(definition, { ...current, sessions: retained }, dir)
 }
 
-function headerEnabled(definition: EnhancementPrefsDefinition, event: SessionEvent | undefined): boolean | undefined {
+export function requestHeaderOf(event: EnhancementSessionEvent | undefined): EnhancementRequestHeader | undefined {
   if (event?.type !== 'request/header') return undefined
-  return event.data.header.system?.includes(definition.marker) === true
+  const data = event.data as { readonly header?: EnhancementRequestHeader } | undefined
+  return data?.header
+}
+
+function headerEnabled(definition: EnhancementPrefsDefinition, event: EnhancementSessionEvent | undefined): boolean | undefined {
+  return requestHeaderOf(event)?.system?.includes(definition.marker)
 }
 
 export function enhancementModeOf(
   definition: EnhancementPrefsDefinition,
-  session: { header: Pick<SessionHeader, 'id' | 'seedLength'>; events: readonly SessionEvent[] },
+  session: { header: EnhancementSessionHeader; events: readonly EnhancementSessionEvent[] },
   stored: boolean | undefined = readEnhancementSession(definition, String(session.header.id)),
 ): boolean {
   const localStart = session.header.seedLength ?? 0
@@ -153,13 +174,13 @@ export function enhancementModeOf(
 export async function resolvePersistedEnhancement(
   definition: EnhancementPrefsDefinition,
   ctx: { get(name: string): unknown },
-  sessionId: SessionId,
+  sessionId: string,
 ): Promise<boolean> {
   const persistence = ctx.get('sessionPersistence') as
     | {
-        load(id: SessionId): Promise<{
-          meta: SessionHeader
-          events: readonly SessionEvent[]
+        load(id: string): Promise<{
+          meta: EnhancementSessionHeader
+          events: readonly EnhancementSessionEvent[]
         }>
       }
     | undefined

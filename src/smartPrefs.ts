@@ -1,6 +1,7 @@
 /** Durable Smart enhancement preference and per-session fork state. */
-import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import {
+  type EnhancementSessionEvent,
+  type EnhancementSessionHeader,
   enhancementModeOf,
   readEnhancementDefault,
   readEnhancementSession,
@@ -22,7 +23,7 @@ export const writeSmartSession = (sessionId: string, enabled: boolean, dir?: str
   writeEnhancementSession(DEFINITION, sessionId, enabled, dir)
 
 export function smartModeOf(
-  session: { header: Pick<SessionHeader, 'id' | 'seedLength'>; events: readonly SessionEvent[] },
+  session: { header: EnhancementSessionHeader; events: readonly EnhancementSessionEvent[] },
   stored?: boolean,
 ): boolean {
   return enhancementModeOf(DEFINITION, session, stored)
@@ -30,7 +31,7 @@ export function smartModeOf(
 
 export async function resolvePersistedSmart(
   ctx: { get(name: string): unknown },
-  sessionId: SessionId,
+  sessionId: string,
 ): Promise<boolean> {
   return await resolvePersistedEnhancement(DEFINITION, ctx, sessionId)
 }

@@ -82,6 +82,7 @@ function makeChannel() {
     provider: 'deepseek',
     tokens: { input: 0, output: 0 },
     cwd: '/tmp',
+    displayCwd: '/tmp',
     gitBranch: 'main',
     working: false,
     spinnerMode: 'requesting',
@@ -102,6 +103,12 @@ function makeChannel() {
     commandList: [
       { name: 'effort', description: 'Adjust the reasoning effort (slider)' },
     ],
+    commandCompletions(input) {
+      const prefix = input.replace(/^\//u, '').trim().toLowerCase()
+      return this.commandList
+        .filter((command) => command.name.startsWith(prefix))
+        .map((command) => ({ ...command, commandLine: `/${command.name}`, replacement: `/${command.name} ` }))
+    },
     contextSegments: { system: 0, prompt: 0, assistant: 0, thinking: 0, tools: 0 },
     get mode() { return MODES[modeIndex] },
     get modeIndex() { return modeIndex },
@@ -167,7 +174,10 @@ function makeChannel() {
 
 const toPlain = s =>
   s
-    .replace(/\x1b\[(\d+)C/g, () => ' '.repeat(8))
+    // 光标前移按真实格数展开：浮层面板覆盖既有行时 diff 会跳过未变单元格
+    // （两个空格之间只发 CSI n C），固定 8 空格会把 "Reasoning effort"
+    // 拆成多格空格导致断言漏匹配。
+    .replace(/\x1b\[(\d+)C/g, (_, n) => ' '.repeat(Number(n)))
     .replace(/\x1b\[[0-9;?>:]*[a-zA-Z]/g, '')
     .replace(/\x1b\]9;[^\x07]*\x07/g, '')
 

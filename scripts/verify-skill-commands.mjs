@@ -9,7 +9,7 @@
  *
  * Run with plain node against the compiled lib: `node scripts/verify-skill-commands.mjs`
  */
-import { createChannel } from '../lib/types/channel.js'
+import { createChannel } from '../lib/types/dsh-adapter/channel.js'
 import { LOCAL_COMMANDS } from '../lib/types/commands.js'
 
 let failed = 0

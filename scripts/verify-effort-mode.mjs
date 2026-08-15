@@ -20,7 +20,7 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { createChannel } from '../lib/types/channel.js'
+import { createChannel } from '../lib/types/dsh-adapter/channel.js'
 
 let failed = 0
 function check(name, ok, extra = '') {

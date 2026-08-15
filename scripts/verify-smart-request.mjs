@@ -222,11 +222,11 @@ try {
     import('@deepseek-ai/dsh-tools'),
     import('@deepseek-ai/dsh-agent'),
     import(agentLoopEntry),
-    import('../lib/types/channel.js'),
-    import('../lib/types/presets.js'),
+    import('../lib/types/dsh-adapter/channel.js'),
+    import('../lib/types/dsh-adapter/presets.js'),
     import('../lib/types/smartPrefs.js'),
     import('../lib/types/forceSmartPrefs.js'),
-    import('../lib/types/smartRuntime.js'),
+    import('../lib/types/dsh-adapter/smartRuntime.js'),
   ])
 
   const responses = [

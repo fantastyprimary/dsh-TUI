@@ -1,4 +1,21 @@
-import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session';
+export interface EnhancementSessionHeader {
+    readonly id: unknown;
+    readonly seedLength?: number;
+}
+export interface EnhancementSessionEvent {
+    readonly type: string;
+    readonly seq: number;
+    readonly data?: unknown;
+}
+export interface EnhancementRequestHeader {
+    readonly system?: string;
+    readonly config?: {
+        readonly maxTokens?: number;
+    };
+    readonly tools?: readonly {
+        readonly name: string;
+    }[];
+}
 export interface EnhancementPrefsDefinition {
     readonly file: string;
     readonly marker: string;
@@ -13,11 +30,12 @@ export declare function readEnhancementDefault(definition: EnhancementPrefsDefin
 export declare function writeEnhancementDefault(definition: EnhancementPrefsDefinition, enabled: boolean, dir?: string): boolean;
 export declare function readEnhancementSession(definition: EnhancementPrefsDefinition, sessionId: string, dir?: string): boolean | undefined;
 export declare function writeEnhancementSession(definition: EnhancementPrefsDefinition, sessionId: string, enabled: boolean, dir?: string): boolean;
+export declare function requestHeaderOf(event: EnhancementSessionEvent | undefined): EnhancementRequestHeader | undefined;
 export declare function enhancementModeOf(definition: EnhancementPrefsDefinition, session: {
-    header: Pick<SessionHeader, 'id' | 'seedLength'>;
-    events: readonly SessionEvent[];
+    header: EnhancementSessionHeader;
+    events: readonly EnhancementSessionEvent[];
 }, stored?: boolean | undefined): boolean;
 export declare function resolvePersistedEnhancement(definition: EnhancementPrefsDefinition, ctx: {
     get(name: string): unknown;
-}, sessionId: SessionId): Promise<boolean>;
+}, sessionId: string): Promise<boolean>;
 //# sourceMappingURL=enhancementPrefs.d.ts.map

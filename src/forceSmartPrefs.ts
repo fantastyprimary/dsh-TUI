@@ -1,6 +1,8 @@
 /** Durable ForceSmart enhancement preference and per-session fork state. */
-import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import {
+  type EnhancementSessionEvent,
+  type EnhancementSessionHeader,
+  requestHeaderOf,
   enhancementModeOf,
   readEnhancementDefault,
   readEnhancementSession,
@@ -21,19 +23,19 @@ export const writeForceSmartSession = (sessionId: string, enabled: boolean, dir?
   writeEnhancementSession(DEFINITION, sessionId, enabled, dir)
 
 export function forceSmartModeOf(
-  session: { header: Pick<SessionHeader, 'id' | 'seedLength'>; events: readonly SessionEvent[] },
+  session: { header: EnhancementSessionHeader; events: readonly EnhancementSessionEvent[] },
   stored: boolean | undefined = readForceSmartSession(String(session.header.id)),
 ): boolean {
   const localStart = session.header.seedLength ?? 0
   const localHeader = session.events.findLast(event =>
     event.seq >= localStart && event.type === 'request/header')
-  if (localHeader?.type === 'request/header') {
-    const header = localHeader.data.header
+  const header = requestHeaderOf(localHeader)
+  if (header !== undefined) {
     if (header.system?.includes(FORCE_SMART_PROMPT_MARKER)) return true
     const tools = header.tools?.map(tool => tool.name) ?? []
     const bootstrap = stored === true
       && header.system === 'You are a helpful software engineer assistant.'
-      && header.config.maxTokens === 1024
+      && header.config?.maxTokens === 1024
       && tools.length === 2
       && tools.includes('str_replace_editor')
       && tools.includes('bash')
@@ -44,14 +46,14 @@ export function forceSmartModeOf(
 
 export async function resolvePersistedForceSmart(
   ctx: { get(name: string): unknown },
-  sessionId: SessionId,
+  sessionId: string,
 ): Promise<boolean> {
   const stored = readForceSmartSession(String(sessionId))
   const persistence = ctx.get('sessionPersistence') as
     | {
-        load(id: SessionId): Promise<{
-          meta: SessionHeader
-          events: readonly SessionEvent[]
+        load(id: string): Promise<{
+          meta: EnhancementSessionHeader
+          events: readonly EnhancementSessionEvent[]
         }>
       }
     | undefined

@@ -20,7 +20,7 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { Chat
   import('@xterm/headless'),
   import('../src/ui.js'),
   import('../src/screens/Chat.js'),
-  import('../src/questions.js'),
+  import('../src/dsh-adapter/questions.js'),
 ])
 
 const COLS = 100
@@ -101,6 +101,7 @@ const channel: any = {
   reasoningEffort: 'max',
   tokens: { input: 120, output: 45 },
   cwd: '/tmp/demo',
+  displayCwd: '/tmp/demo',
   gitBranch: 'main',
   working: true,
   spinnerMode: 'requesting',

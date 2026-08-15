@@ -35,7 +35,7 @@ process.env.USERPROFILE = home
 
 // Import AFTER the env overrides: sessionHistory resolves ~/.dsh-tui at
 // module load, sessionLog resolves roots at call time.
-const { createChannel } = await import('../lib/types/channel.js')
+const { createChannel } = await import('../lib/types/dsh-adapter/channel.js')
 
 const CWD = '/tmp'
 const COUNT = 25
@@ -102,7 +102,7 @@ const lastUsed = JSON.parse(readFileSync(join(home, '.dsh-tui', 'last-used.json'
 assert.equal(typeof lastUsed[target], 'number', 'last-used entry recorded for the renamed session')
 
 // And the log itself carries the appended title event (restart durability).
-const { readSessionTitleFromLog } = await import('../lib/types/compat/sessionLog.js')
+const { readSessionTitleFromLog } = await import('../lib/types/dsh-adapter/compat/sessionLog.js')
 assert.equal(readSessionTitleFromLog(target)?.title, 'renamed-deep', 'title event persisted in the log')
 
 rmSync(root, { recursive: true, force: true })

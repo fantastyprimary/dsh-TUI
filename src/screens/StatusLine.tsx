@@ -4,7 +4,7 @@ import { formatTokens } from '../cc/format.js'
 import { Byline } from '../components/design-system/Byline.js'
 import { KeyboardShortcutHint } from '../components/design-system/KeyboardShortcutHint.js'
 import { ActivityLine, contextPressurePct } from '../components/ActivityLine.js'
-import type { Channel } from '../channel.js'
+import type { Channel } from '../dsh-adapter/channel.js'
 import { modeDisplayName } from '../sessionModes.js'
 import {
   renderContextBar,
@@ -123,7 +123,7 @@ export function StatusLine({
         ]
       : []),
     <Text key="cwd" color="inactiveShimmer">
-      {basename(channel.cwd)}
+      {basename(channel.displayCwd)}
     </Text>,
     ...(channel.sessionTitle
       ? [

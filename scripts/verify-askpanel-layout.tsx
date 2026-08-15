@@ -16,7 +16,7 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { Chat
   import('@xterm/headless'),
   import('../src/ui.js'),
   import('../src/screens/Chat.js'),
-  import('../src/questions.js'),
+  import('../src/dsh-adapter/questions.js'),
 ])
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -76,6 +76,7 @@ function makeChannel(transcriptRows: unknown[], listeners?: Set<() => void>) {
     model: 'deepseek-v4-flash',
     tokens: { input: 120, output: 45 },
     cwd: 'C:/code/demo-project',
+    displayCwd: 'C:/code/demo-project',
     gitBranch: 'main',
     working: true,
     spinnerMode: 'requesting',

@@ -1,6 +1,6 @@
 /**
  * `/trace` 轨迹视图回归（issue #80）：
- * 1. 纯函数装配（src/trace.ts）：事件 → 条目、tool/step/turn 配对耗时、
+ * 1. 纯函数装配（src/dsh-adapter/trace.ts）：事件 → 条目、tool/step/turn 配对耗时、
  *    thinking 条目、todo 摘要、过滤器、extendTrace 增量追加、时长/时钟/
  *    CJK 宽度截断。
  * 2. 组件渲染（xterm headless 驱动真实 TraceView）：条目行渲染、耗时
@@ -21,7 +21,7 @@ const {
   formatClock,
   formatDuration,
   truncateWidth,
-} = await import('../src/trace.js')
+} = await import('../src/dsh-adapter/trace.js')
 const { TraceView, TRACE_WINDOW } = await import('../src/components/TraceView.js')
 const { setLang } = await import('../src/i18n.js')
 
