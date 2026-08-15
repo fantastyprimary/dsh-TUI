@@ -64,7 +64,7 @@ export interface PresetComposition {
  * @param requested - The preset id the caller wants, or undefined for the default.
  * @returns The header value + setup hook, or an empty composition.
  */
-export declare function composePreset(ctx: Context, requested?: string): Promise<PresetComposition>;
+export declare function composePreset(ctx: Context, requested?: string, smart?: boolean): Promise<PresetComposition>;
 /**
  * The preset a PERSISTED session actually runs, read from its log: the last
  * `agent-preset/selected` event wins over the creation header (a blank

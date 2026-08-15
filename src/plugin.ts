@@ -18,6 +18,7 @@ import { explicitModelRoute, recordedModelRoute, resolveModelRoute, validateMode
 import type { ModelRoute } from './modelRoute.js'
 import { readPresetPref } from './presetPrefs.js'
 import { composePreset, resolvePersistedPreset, runningPresetOf } from './presets.js'
+import { readSmartDefault, resolvePersistedSmart, smartModeOf, writeSmartSession } from './smartPrefs.js'
 import { clearResumeTarget, writeResumeTarget } from './sessionHistory.js'
 import { resolveSessionCwd } from './utils/workspaceRoot.js'
 import { checkForTuiUpdate, installedTuiVersion, isVersionNewer, resolveDshProfileName, resolveTuiUpdateTarget, updateTuiAndRestart } from './update.js'
@@ -140,13 +141,14 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // here — the agent meta and the channel must agree.
   const sessionCwd = resolveSessionCwd(config.cwd)
   const meta = { cwd: sessionCwd }
-  const { agent, handle, agentPreset, route: createdRoute } = await resolveAgent(
+  const { agent, handle, agentPreset, smart, route: createdRoute } = await resolveAgent(
     ctx,
     config.sessionId,
     configuredRoute,
     startupRoute,
     meta,
     config.preset,
+    config.smart ?? readSmartDefault() ?? false,
   )
 
   // Status-line route: the exact route the agent runs with — on create the
@@ -178,6 +180,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     // persisted `/preset` choice; undefined adopts the roster default.
     configuredPreset: config.preset,
     agentPreset,
+    smart,
+    configuredSmart: config.smart,
     // Shift+Tab session-mode cycle (undefined → the built-in default/
     // plan/full cycle in sessionModes.ts).
     modes: config.modes,
@@ -382,7 +386,8 @@ async function resolveAgent(
   startupRoute: ModelRoute,
   meta: { cwd: string },
   configuredPreset?: string,
-): Promise<{ agent: Agent; handle?: AgentHandle; agentPreset?: string; route?: ModelRoute }> {
+  startupSmart = false,
+): Promise<{ agent: Agent; handle?: AgentHandle; agentPreset?: string; smart: boolean; route?: ModelRoute }> {
   // Resume override (issue #67): cordis.yml overrides the target session's
   // recorded route only when it pins BOTH halves; undefined halves let the
   // session's own request/header records win (issue #30).
@@ -392,14 +397,19 @@ async function resolveAgent(
     const resumeId = SessionId(requestedSessionId)
     const existing = ctx.agents.get(resumeId)
     if (existing !== undefined) {
-      return { agent: existing, agentPreset: runningPresetOf(existing.session) }
+      return {
+        agent: existing,
+        agentPreset: runningPresetOf(existing.session),
+        smart: smartModeOf(existing.session),
+      }
     }
     try {
       // The resumed session keeps the preset its log records (last
       // `agent-preset/selected` wins over the creation header), never the
       // caller's current preference.
       const persisted = await resolvePersistedPreset(ctx, resumeId)
-      const composed = await composePreset(ctx, persisted)
+      const smart = await resolvePersistedSmart(ctx, resumeId)
+      const composed = await composePreset(ctx, persisted, smart)
       const resumed = await ctx.agents.resume({
         resumeSessionId: resumeId,
         agentOptions: resumeOptions,
@@ -413,6 +423,7 @@ async function resolveAgent(
         agent: resumed.agent,
         handle: resumed,
         agentPreset: composed.agentPreset,
+        smart,
         route: resumeRoute ?? recordedModelRoute(resumed.agent.session.events),
       }
     } catch (error) {
@@ -424,7 +435,7 @@ async function resolveAgent(
     }
   }
   const sessionId = SessionId(randomUUID())
-  const composed = await composePreset(ctx, configuredPreset ?? readPresetPref())
+  const composed = await composePreset(ctx, configuredPreset ?? readPresetPref(), startupSmart)
   // Fresh-session route precedence (issues #14/#30/#67): resolved atomically
   // by the caller (complete cordis.yml route > the persisted `/model` choice
   // > the harness default), then validated against the adapter catalog — a
@@ -456,7 +467,8 @@ async function resolveAgent(
       `dsh-tui: failed to create agent (provider=${route.provider}, model=${route.model}): ${message}`,
     )
   })
-  return { agent: created.agent, handle: created, agentPreset: composed.agentPreset, route }
+  writeSmartSession(String(sessionId), startupSmart)
+  return { agent: created.agent, handle: created, agentPreset: composed.agentPreset, smart: startupSmart, route }
 }
 
 /**

@@ -408,6 +408,9 @@ export interface Channel {
     /** The preset the CURRENT session runs under (issue #8), resolved from its
      *  log at create/resume time; undefined when no roster is mounted. */
     readonly agentPreset: string | undefined;
+    /** Whether the orthogonal Smart routing-suite enhancement is active over
+     *  the current official preset. */
+    readonly smart: boolean;
     /** The roster's presets for the `/preset` picker (empty without a roster). */
     listPresets(): Promise<readonly PresetOption[]>;
     /** Switch the agent preset (`/preset`): a blank session swaps composition
@@ -416,6 +419,8 @@ export interface Channel {
      *  future sessions instead. False when the roster is absent, the id is
      *  unknown/broken, or a turn is running. */
     switchPreset(presetId: string): Promise<boolean>;
+    /** Toggle Smart by forking the conversation into a fully recomposed agent. */
+    switchSmart(enabled?: boolean): Promise<boolean>;
     /** Reset the visible transcript (`/clear`). */
     clear(): void;
     /**
@@ -620,10 +625,14 @@ export interface ChannelState {
     cycleMode(): Promise<void>;
     /** The preset the current session runs under (see the public Channel type). */
     agentPreset: string | undefined;
+    /** Smart enhancement state (see the public Channel type). */
+    smart: boolean;
     /** The roster's presets for the `/preset` picker (see the public Channel type). */
     listPresets(): Promise<readonly PresetOption[]>;
     /** Switch the agent preset (see the public Channel type). */
     switchPreset(presetId: string): Promise<boolean>;
+    /** Toggle Smart (see the public Channel type). */
+    switchSmart(enabled?: boolean): Promise<boolean>;
     clear(): void;
     /** @internal older-row restoration (see the public Channel.loadOlder). */
     loadOlder(): number;
@@ -700,6 +709,10 @@ export declare function createChannel(ctx: Context, initialAgent: Agent, options
     configuredModel?: string;
     /** The preset the initial agent's session runs under (from resolveAgent). */
     agentPreset?: string;
+    /** Smart state of the initial agent, plus an optional static config pin
+     *  that wins over the persisted default for new sessions. */
+    smart?: boolean;
+    configuredSmart?: boolean;
     /** Shift+Tab session-mode cycle from cordis.yml `modes`; undefined →
      *  the built-in default/plan/full cycle (sessionModes.ts). */
     modes?: readonly SessionModeSpec[];

@@ -83,6 +83,38 @@ declare const dict: {
         readonly zh: "Preset 已切换：{{id}}（已保存为默认）";
         readonly en: "Preset switched: {{id}} (saved as default)";
     };
+    readonly 'smart-agent-running': {
+        readonly zh: "Agent 运行中，无法切换 Smart";
+        readonly en: "Agent is running; Smart cannot be switched";
+    };
+    readonly 'smart-unavailable': {
+        readonly zh: "Smart 切换不可用——会话 fork 服务未挂载";
+        readonly en: "Smart switch unavailable — session fork services are not loaded";
+    };
+    readonly 'smart-switch-failed': {
+        readonly zh: "Smart 切换失败 · {{err}}";
+        readonly en: "Smart switch failed · {{err}}";
+    };
+    readonly 'smart-already': {
+        readonly zh: "Smart 已经是 {{state}}";
+        readonly en: "Smart is already {{state}}";
+    };
+    readonly 'smart-switched': {
+        readonly zh: "Smart 已切换为 {{state}}（对话已保留并保存为默认）";
+        readonly en: "Smart switched {{state}} (conversation preserved and saved as default)";
+    };
+    readonly 'smart-switched-pref-failed': {
+        readonly zh: "Smart 已切换为 {{state}}，但状态偏好未完整保存";
+        readonly en: "Smart switched {{state}}, but its state preference was not fully saved";
+    };
+    readonly 'smart-current': {
+        readonly zh: "Smart 增强  {{state}}";
+        readonly en: "Smart enhancement  {{state}}";
+    };
+    readonly 'smart-usage': {
+        readonly zh: "用法：/smart [on|off|status]";
+        readonly en: "Usage: /smart [on|off|status]";
+    };
     readonly 'mcp-none-configured': {
         readonly zh: "未配置 MCP 服务器。";
         readonly en: "No MCP servers configured.";
@@ -1009,6 +1041,9 @@ declare const dict: {
     };
     readonly 'cmd-desc-preset': {
         readonly zh: "切换 Agent 预设（standard/code/minimal/cordis）";
+    };
+    readonly 'cmd-desc-smart': {
+        readonly zh: "在当前 Agent 预设上切换 Smart 路由增强";
     };
     readonly 'cmd-desc-theme': {
         readonly zh: "切换配色主题（内置或自定义）";

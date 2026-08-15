@@ -20,6 +20,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { AgentSetup } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
+import { mountSmartEnhancement } from './smartEnhancement.js'
 
 /** One roster entry, as returned by `agentPresets.list()`/`resolve()`. */
 export interface AgentPresetInfo {
@@ -71,9 +72,13 @@ export interface PresetComposition {
  * @param requested - The preset id the caller wants, or undefined for the default.
  * @returns The header value + setup hook, or an empty composition.
  */
-export async function composePreset(ctx: Context, requested?: string): Promise<PresetComposition> {
+export async function composePreset(ctx: Context, requested?: string, smart = false): Promise<PresetComposition> {
   const presets = rosterOf(ctx)
-  if (presets === undefined) return {}
+  if (presets === undefined) {
+    return smart
+      ? { setup: agentCtx => mountSmartEnhancement(ctx, agentCtx) }
+      : {}
+  }
   let resolvedId: string
   try {
     resolvedId = (await presets.resolve(requested)).id
@@ -88,6 +93,7 @@ export async function composePreset(ctx: Context, requested?: string): Promise<P
     agentPreset: resolvedId,
     setup: async (agentCtx: Context) => {
       await presets.mount(agentCtx, resolvedId)
+      if (smart) await mountSmartEnhancement(ctx, agentCtx, resolvedId)
     },
   }
 }
