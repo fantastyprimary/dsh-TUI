@@ -105,14 +105,21 @@ The complete bilingual index is [`docs/README.md`](docs/README.md).
 
 ## Configuration and extensions
 
-- **Agent presets and Smart**: `/preset` still selects one of the four official
-  Agent modes. `/smart` independently overlays Smart, based on
-  `dsh-routing-suite`, on that preset. A Smart switch forks and preserves the
-  conversation while rebuilding prompt, context, tools, and services; Smart
-  never becomes a fifth roster preset. See
+- **Agent presets and intelligent enhancements**: `/preset` still selects one
+  of the four official Agent modes. `/smart` overlays Smart from
+  `dsh-routing-suite`; `/force-smart` overlays the ForceSmart Anchored
+  controller tuned for DeepSeek V4 Pro. They are mutually exclusive, and
+  enabling either performs one full-session fork that disables the other while
+  rebuilding prompt, context, tools, route, cwd, and history. Smart selects
+  Router Standard or Router Pro internally. Both first-turn controllers draw
+  on Anchored; ForceSmart is the sole product/UI name, while Liangshen is only
+  an implementation reference, never an alias. Plan, goal, and native
+  spawn/fork/continuable child workflows retain their authority, context, and
+  tool boundaries. Neither
+  enhancement becomes a fifth roster preset. See
   [Configuration](docs/configuration.en.md#agent-presets).
 - **Custom themes**: `/theme` selects a built-in or JSON theme from
-  `~/.dsh-cc/themes/`. See [Themes](docs/themes.en.md).
+  `~/.dsh-tui/themes/`. See [Themes](docs/themes.en.md).
 - **MCP**: mount servers through `@deepseek-ai/dsh-mcp-client`; `/mcp` reports
   connection state. See [Configuration](docs/configuration.en.md#mcp).
 

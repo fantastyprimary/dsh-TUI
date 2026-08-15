@@ -127,7 +127,7 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 |---|---|
 | 会话 | `/new` 新会话 · `/resume` 恢复 · `/rename` 重命名 · `/clear` 清屏 · `/compact` 压缩 · `/export` 导出 Markdown · `/trace` 轨迹时间线 |
 | 状态 | `/status` 会话信息 · `/cost` token 用量 · `/doctor` 环境自检 · `/config` 配置来源 · `/init` 创建 AGENTS.md |
-| 模型 | `/model` 选择器 · `/thinking` 思考显示 · `/tokens` token 明细 · `/theme` 主题选择器 · `/lang` 中英界面切换 |
+| 模型/Agent | `/model` 选择器 · `/preset` 官方预设 · `/smart` 路由增强 · `/force-smart` 锚定增强 · `/thinking` 思考显示 · `/tokens` token 明细 · `/theme` 主题选择器 · `/lang` 中英界面切换 |
 | 账号/策略 | `/provider` 添加模型提供方 · `/login` 凭证状态 · `/logout` 登出说明 · `/permissions` 权限说明 · `/add-dir` 文件策略范围 · `/hooks` · `/mcp` · `/memory` |
 | 技能 | `/audit` 代码审计 · `/bug` bug 报告 · `/review` 代码评审 · `/practice` 编程练习 · `/pr_comments` PR 评论 · `/release-notes` 发布说明 · `/vuln-check` 漏洞检查 |
 | 其它 | `/agents` 子代理列表 · `/update` 自动更新并重启 · `/vim` · `/terminal-setup` · `/connect` · `/help` · `/exit` |
@@ -148,13 +148,17 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 
 ## 配置与扩展
 
-- **Agent preset 与 Smart**：四种官方 Agent 模式仍由 `/preset` 选择；`/smart`
-  是叠加在当前 preset 上、基于 `dsh-routing-suite` 的 Smart 增强。切换 Smart
-  时会 fork 保留对话，并完整重组 prompt、context 与工具，不会向官方 preset 名册
-  加入第五种模式。
-  `/preset` 仍只允许空白会话切换；Smart 则通过完整 fork 支持运行时开关。preset
-  默认值保存在 `~/.dsh-tui/agent-preset.json`，Smart 默认值保存在
-  `~/.dsh-tui/smart.json`，`/model` 的选择保存在 `~/.dsh-tui/model.json`。
+- **Agent preset 与智能增强**：四种官方 Agent 模式仍由 `/preset` 选择；`/smart`
+  叠加基于 `dsh-routing-suite` 的 Smart，`/force-smart` 叠加面向 DeepSeek V4 Pro
+  调校的 ForceSmart Anchored 控制器。两者互斥，开启一个会用一次完整 session fork
+  自动关闭另一个；prompt、context、工具、route、工作目录和历史会重新组装，不会向
+  官方 preset 名册加入第五种模式。Smart 内部按模型选择 Router Standard/Router Pro；
+  Smart 与 ForceSmart 的首轮控制都参考 Anchored；ForceSmart 是其增强的唯一产品名，
+  固定提交中的“梁神模式”仅为机制来源，不作为别名或界面名称。
+  `/plan`、`/goal` 和原生 spawn/fork/continuable 子代理保留权限、上下文与工具边界。
+  `/preset` 仍只允许空白会话切换。preset 和两个增强的默认值分别保存在
+  `~/.dsh-tui/agent-preset.json`、`smart.json`、`force-smart.json`；`/model` 的选择
+  保存在 `~/.dsh-tui/model.json`。
   详见[配置参考](docs/configuration.md#agent-preset)。
 - **自定义主题**：`/theme` 选择器（`auto` 跟随系统/终端背景，内置 `light` / `dark` /
   `dark-ansi`），也支持 `~/.dsh-tui/themes/<名字>.json` 自定义主题，选中即热切换

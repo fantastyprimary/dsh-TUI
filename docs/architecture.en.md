@@ -92,6 +92,8 @@ ConPTY.
 | `~/.dsh-tui/themes/` | User theme JSON files |
 | `~/.dsh-tui/working-activity.json` | Activity animation selection |
 | `~/.dsh-tui/agent-preset.json` | Default Agent preset for new sessions |
+| `~/.dsh-tui/smart.json` | Smart default and per-replacement-session state |
+| `~/.dsh-tui/force-smart.json` | ForceSmart default and per-replacement-session state |
 
 `DSH_TUI_SESSION_ROOT` overrides the JSONL root in either composition. The
 profile defaults to `$DSH_HOME/sessions` (normally `~/.dsh/sessions/`);
@@ -134,10 +136,21 @@ visual TUI alone does not describe the effective policy.
   separate UI segment; it is included in the system/context meter.
 - `/model` switches through a session fork rather than an in-place update; the
   old session remains in `/resume`.
-- `/smart` switches the independent enhancement through a fork. The child
-  keeps the derived conversation surface, while its new `request/header` is
-  fully assembled from the base preset plus Smart overlay; old header events
-  never become messages.
+- `/smart` and `/force-smart` switch mutually exclusive enhancement layers in
+  one fork. The child inherits complete history, route, cwd, preset, and
+  plan/goal state; its new `request/header` is assembled from the base preset
+  plus exactly one overlay, while old header events never become model
+  messages. Smart selects router-pro for V4 Pro and Router Standard for Flash
+  or unknown models; ForceSmart remains an independent Anchored controller.
+  Both first-turn surfaces draw on dsh-anchored-standard's two-phase design,
+  but ForceSmart is the only product name and the reference projects do not
+  become a third mode.
+  Native DSH children inherit the parent enhancement through a runtime bridge,
+  but overlays add no child-local tools and preserve child persona plus
+  delegation/sandbox/approval contexts. Smart routes only within the child's
+  existing catalog; ForceSmart children start promoted so one-shot delegation
+  is never trapped under the bootstrap cap. Promotion restores the base
+  subagent, workflow, skill, context, and tool surfaces.
 - `Ctrl+V` clipboard reads dispatch per platform: PowerShell `Get-Clipboard` on
   Windows (a competing process can lock the clipboard and make the read appear
   empty after retries), `osascript`/`pbpaste` on macOS, and the first usable of

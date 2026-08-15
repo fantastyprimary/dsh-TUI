@@ -38,6 +38,8 @@ Profile 启动按顺序叠加 `dsh-base`、已安装 bundle、`@deepseek-harness
     contextBar: true
     fullscreen: false
     preset: !!js process.env.DSH_TUI_PRESET ?? undefined
+    smart: !!js process.env.DSH_TUI_SMART === '1' ? true : process.env.DSH_TUI_SMART === '0' ? false : undefined
+    forceSmart: !!js process.env.DSH_TUI_FORCE_SMART === '1' ? true : process.env.DSH_TUI_FORCE_SMART === '0' ? false : undefined
     sessionId: !!js process.env.DSH_TUI_RESUME_SESSION ?? undefined
 ```
 
@@ -54,6 +56,7 @@ Profile 启动按顺序叠加 `dsh-base`、已安装 bundle、`@deepseek-harness
 | `fullscreen` | `false` | `true` 使用 alternate screen、应用内滚动和鼠标选区；`false` 使用 inline 模式 |
 | `preset` | 名册默认 `standard` | 新会话 Agent preset；显式配置优先于持久化偏好 |
 | `smart` | 持久化选择或 `false` | 在所选 Agent preset 上启用 Smart 增强 |
+| `forceSmart` | 持久化选择或 `false` | 在所选 Agent preset 上启用 ForceSmart；与 Smart 互斥 |
 | `sessionId` | 未设置 | 要恢复的会话 ID，通常由 Windows `--resume` 启动器注入 |
 
 ## 工作状态行
@@ -92,7 +95,7 @@ Profile 启动按顺序叠加 `dsh-base`、已安装 bundle、`@deepseek-harness
 - 恢复旧会话时，以该会话日志记录的 preset 为准，不读取当前默认值覆盖它。
 
 
-### Smart 增强
+### Smart 与 ForceSmart 增强
 
 Smart 不是第五个 Agent preset，而是叠加在 `standard`、`code`、`minimal`、
 `cordis` 或用户 preset 上的正交增强：`/preset` 决定基础能力，`/smart on|off`
@@ -101,12 +104,19 @@ Smart 不是第五个 Agent preset，而是叠加在 `standard`、`code`、`mini
 服务，旧会话仍可在 `/resume` 恢复。`smart: true` 或 `DSH_TUI_SMART=1` 可让新会话
 启动即启用。
 
-Smart 基于 `dsh-routing-suite`，内置其固定的 Router Standard v0.2.0。它的首轮
-Standard RL prompt/context 与工具面只在基础 preset 为 `standard` 时启用；其他
-preset 保留自己的完整工具目录，同时使用任务分类、persona、near-field 引导和
-router 管理工具。Standard 的 Smart 首轮会额外挂载 v0.2.0 所需的
-`str_replace_editor`；Skills、插件工具和运行时 policy context 会在首次持久
-`tool/call` 后随完整 Standard 工具目录恢复。`dev_mode_subagent` 只是无工具目录、
+Smart 基于 [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite)，固定到
+suite `eb1b00d` 与 Router v0.3.0。Smart 在 `deepseek-v4-pro` 上使用新的 Router Pro
+策略：维护/修复选择 RL shell/editor 接口，新建/构建选择 doer write-first 接口，
+无明确证据时使用 router-v2 few-shot；Flash 与未知模型继续使用 Router Standard。
+这些首轮 prompt/context 与工具面只在基础 preset 为 `standard` 时启用；其他 preset
+保留自己的完整工具目录，同时使用非破坏性的任务分类、near-field 引导和 router
+管理工具。Standard 的顶层 Smart 会额外挂载路由所需的 `str_replace_editor`；Skills、
+插件工具和运行时 policy context 会在首次持久
+`tool/call` 后随完整 Standard sections 与工具目录恢复；若首答没有工具调用，则下一
+用户轮恢复；在已有历史上运行 `/smart on` 会直接使用恢复后的表面，不会重新伪装成
+干净首轮。Router Pro 不修改请求输出预算。suite 新增的 `dsh-mode-boost` 与 Router
+重复注入，且其当前首轮、promoted contexts 和无 Shell 子代理行为不满足本 TUI 的
+兼容边界，因此只记录来源而不双重挂载。`dev_mode_subagent` 只是无工具目录、
 有输出上限的隔离文本咨询，不等同于可执行任务的 worker。Super Injector v0.3.3
 因上游发布物缺少 LICENSE/NOTICE 文件
 而不随包再分发；若官方 payload 已安装在当前或 `web` profile，
@@ -116,6 +126,38 @@ Smart 会校验版本与 host bundle SHA-256 后挂载完整上游 host 工具�
 service 和其他副作用可能是进程级；`/smart off` 会移除 agent-scoped Smart prompt/Router，
 并隐藏已知 host 管理工具与 context，但不会卸载任意已注入插件。完全隔离需要使用独立
 进程/profile；关闭已激活 host 的全部进程级行为需要重启当前进程。
+
+ForceSmart 同样不是 preset 或 Shift+Tab session mode；使用 `/force-smart on|off|status`、
+`forceSmart: true` 或 `DSH_TUI_FORCE_SMART=1` 控制。它参考固定到 `d97bec9` 的
+[dsh-anchored-standard](https://github.com/xiaobright/dsh-anchored-standard/blob/d97bec91a3d668f4cf1d03ee5f20aae84fb6f85c/README.zh-CN.md)
+与 [dsh-web-ui 的“梁神模式”](https://github.com/zhu1090093659/dsh-web-ui/blob/3647a33fa467e0335260468614f6eed04b196c38/packages/dsh-liangshen/README.zh.md)，
+但产品、命令与界面名称始终只使用 ForceSmart。在兼容的干净首轮，system prompt
+精确对齐官方 Minimal 的单行 persona，临时只暴露 `bash` 和 `str_replace_editor`，并将
+两者的模型可见提示与 schema 对齐官方 Minimal；执行层优先复用基础 preset 已允许的
+兼容工具，顶层缺少 editor 时挂载官方实现，非 Windows 顶层缺少 Bash 时挂载官方
+persistent Bash。ForceSmart 同时延后普通 agent instructions/skill catalog，并把请求预算
+设为 1024；首次工具轨迹满足 Anchored 门控、首答无工具、turn 结束或安全兜底后，恢复
+基础 preset 的完整 sections、contexts、工具及原请求预算。已有历史的 fork/resume 直接
+使用恢复后的表面。Anchored 当前主线默认不封顶；ForceSmart 为保持 overlay 解耦，
+不替换基础 preset 的长期执行层，但首轮模型可见的两工具 schema 与 Minimal 对齐，并
+有意保留固定参考组合中的 1024 首轮预算。Windows 不会把 `pwsh` 冒充 Bash；无法形成
+兼容两工具表面时直接 fail-open。活跃 `/plan`、活跃 `/goal` 与所有 ForceSmart 子代理
+会直接从 promoted 阶段完整放行，
+因此 `exit_plan_mode`、goal、subagent 和 workflow 不会失去退出/控制路径。ForceSmart 不
+检查或限制模型 ID：非 V4 Pro 模型静默可用，但当前实验调校证据主要来自正式版
+DeepSeek V4 Pro。
+
+Smart 与 ForceSmart 互斥。`/smart on` 会自动关闭 ForceSmart，`/force-smart on` 会自动
+关闭 Smart，且每次只创建一个 replacement session；关闭当前增强不会恢复之前的另一个。
+显式配置优先于持久默认，若两项显式同时为 `true`，ForceSmart 胜出。状态分别保存在
+`~/.dsh-tui/smart.json` 与 `~/.dsh-tui/force-smart.json`；session-local request header
+优先于 sidecar 和继承 header，确保 `/resume`、rewind、`/model`、`/new` 与 workspace
+归属按目标 session 重组。
+
+DSH 原生 spawn、fork 与 continuable 子代理继承父级当前增强。增强不会在 child scope
+新增工具或绕过委派 `toolFilter`；子代理自己的 persona、delegation、sandbox 与 approval
+contexts 始终保留。Smart 可在已允许的目录内路由；ForceSmart 子代理直接从 promoted
+阶段开始，避免一次性委托在 1024-token bootstrap 中结束后永远无法恢复完整能力。
 
 自定义 preset 放在 `$DSH_HOME/.agent-presets/<name>/`，目录中应包含
 `agent.cordis.yml`。默认 `DSH_HOME` 下的路径即 `~/.dsh/.agent-presets/`。
@@ -165,6 +207,7 @@ Profile 模式不再使用旧的 `DSH_TUI_COMPACT_RATIO`、
 | `DSH_TUI_PERSONA` | 覆盖组合注入的 Agent persona |
 | `DSH_TUI_PRESET` | 覆盖新会话默认 Agent preset |
 | `DSH_TUI_SMART` | `1`/`0`：覆盖新会话 Smart 增强默认值 |
+| `DSH_TUI_FORCE_SMART` | `1`/`0`：覆盖新会话 ForceSmart 增强默认值 |
 | `DSH_SMART_RUNTIME_PATH` | Smart 可选 host runtime 包目录或 `lib/index.js` 路径 |
 | `DSH_TUI_THEME` | 锁定内置（`auto`/`light`/`dark`/`dark-ansi`）或自定义主题，优先于持久化选择 |
 | `DSH_TUI_DISABLE_MOUSE` | 在 fullscreen 模式临时关闭鼠标处理 |

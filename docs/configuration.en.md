@@ -40,6 +40,8 @@ A complete common override looks like this:
     contextBar: true
     fullscreen: false
     preset: !!js process.env.DSH_TUI_PRESET ?? undefined
+    smart: !!js process.env.DSH_TUI_SMART === '1' ? true : process.env.DSH_TUI_SMART === '0' ? false : undefined
+    forceSmart: !!js process.env.DSH_TUI_FORCE_SMART === '1' ? true : process.env.DSH_TUI_FORCE_SMART === '0' ? false : undefined
     sessionId: !!js process.env.DSH_TUI_RESUME_SESSION ?? undefined
 ```
 
@@ -56,6 +58,7 @@ A complete common override looks like this:
 | `fullscreen` | `false` | `true` uses the alternate screen, app scrolling, and mouse selection; `false` uses inline mode |
 | `preset` | roster default `standard` | Agent preset for new sessions; explicit configuration wins over persisted preference |
 | `smart` | persisted choice or `false` | Enable Smart over the selected Agent preset |
+| `forceSmart` | persisted choice or `false` | Enable ForceSmart over the selected Agent preset; mutually exclusive with Smart |
 | `sessionId` | unset | Session to resume, normally injected by the Windows `--resume` launcher |
 
 ## Live activity row
@@ -98,7 +101,7 @@ Usage rules:
   does not overwrite it with the current default.
 
 
-### Smart enhancement
+### Smart and ForceSmart enhancements
 
 Smart is not a fifth Agent preset. It is an orthogonal enhancement over
 `standard`, `code`, `minimal`, `cordis`, or a user preset: `/preset` chooses
@@ -108,14 +111,23 @@ target agent reassembles its agent-scoped system prompt, dynamic context, tool
 schemas, and services; the old session remains available through `/resume`. Set
 `smart: true` or `DSH_TUI_SMART=1` to enable it for new sessions at startup.
 
-Smart is based on `dsh-routing-suite` and bundles its pinned Router Standard
-v0.2.0. Its Standard-specific first-request RL prompt/context and tool surface
-run only over the `standard` base preset; other presets retain their complete
-native catalogs while gaining task classification, persona, near-field
-guidance, and router management tools. Smart also mounts the
-`str_replace_editor` required by v0.2.0 for Standard's first request. Skills,
-plugin tools, and runtime policy contexts return with the complete Standard
-catalog after the first durable `tool/call`. `dev_mode_subagent` is an isolated,
+Smart is based on [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite), pinned to suite `eb1b00d` and Router
+v0.3.0. On `deepseek-v4-pro`, Smart uses Router Pro: maintenance/fix selects
+the RL shell/editor interface, greenfield build selects the doer write-first
+interface, and ambiguous input uses router-v2 few-shot. Flash and unknown
+models keep Router Standard. These first-request prompt/context and tool
+surfaces run only over the `standard` base preset; other presets retain their
+complete native catalogs while receiving non-destructive classification and
+near-field guidance. Top-level Standard Smart also mounts the required
+`str_replace_editor`. Skills,
+plugin tools, runtime policy contexts, and the complete Standard sections
+return after the first durable `tool/call`; a tool-less first answer promotes
+the next user turn, and `/smart on` over existing history starts promoted
+instead of pretending to be a clean first request. Router Pro does not change
+the request output budget. The suite's new `dsh-mode-boost` overlaps Router and
+currently violates this TUI's first-message, promoted-context, and shell-less
+child boundaries, so its provenance is recorded without double-mounting it.
+`dev_mode_subagent` is an isolated,
 output-bounded text consultation without a tool catalog; it is not an
 executable task worker. Super Injector v0.3.3 is not redistributed because its upstream release declares
 BSD-3-Clause but includes no LICENSE/NOTICE artifact. When the official payload
@@ -129,6 +141,43 @@ process-global. `/smart off` removes the agent-scoped Smart prompt and Router
 and hides known host management tools and context, but it does not unload
 arbitrary injected plugins. Full isolation requires a separate process/profile;
 stopping all activated host behavior requires restarting the current process.
+
+ForceSmart is likewise neither a preset nor a Shift+Tab session mode. Control
+it with `/force-smart on|off|status`, `forceSmart: true`, or
+`DSH_TUI_FORCE_SMART=1`. Adapted from
+[dsh-anchored-standard at `d97bec9`](https://github.com/xiaobright/dsh-anchored-standard/blob/d97bec91a3d668f4cf1d03ee5f20aae84fb6f85c/README.md) and
+[dsh-web-ui's Liangshen mode](https://github.com/zhu1090093659/dsh-web-ui/blob/3647a33fa467e0335260468614f6eed04b196c38/packages/dsh-liangshen/README.zh.md). The product, command, and UI name remains ForceSmart only. On a compatible clean first request, the system prompt is byte-aligned with the official Minimal one-line persona; the request temporarily exposes only `bash` and `str_replace_editor`, with their model-facing prompts and schemas aligned to official Minimal. The execution layer reuses compatible tools already allowed by the base preset, mounts the official editor when absent at the top level, and mounts official persistent Bash on non-Windows top-level agents when Bash is absent. It defers ordinary agent instructions and
+the skill catalog, and uses a 1024-token request budget. The complete base
+preset sections, contexts, tools, and native budget return after an anchored
+tool trajectory, a tool-less first answer, a turn boundary, or the bounded
+safety fallback. Forked/resumed sessions with model history start promoted.
+Current Anchored main has no default output cap. To remain a decoupled overlay,
+ForceSmart does not replace the base preset's long-lived execution layer, but
+its first request does align the two model-facing tool schemas with Minimal and
+deliberately retains the fixed reference composition's 1024-token budget.
+Windows never presents `pwsh` as Bash; an incompatible two-tool surface fails
+open.
+Active `/plan`, active `/goal`, and all ForceSmart children start promoted and
+pass through intact, preserving `exit_plan_mode`, goal, subagent, and workflow
+control paths. ForceSmart does not reject, branch on, or warn for other model
+IDs; it is silently available there, although the current tuning evidence is
+primarily for the released DeepSeek V4 Pro.
+
+Smart and ForceSmart are mutually exclusive. `/smart on` disables ForceSmart,
+and `/force-smart on` disables Smart in the same single replacement-session
+fork. Turning the active enhancement off does not restore the previous one.
+Explicit configuration wins persisted defaults; ForceSmart wins when both
+explicit booleans are true. State is stored separately in
+`~/.dsh-tui/smart.json` and `~/.dsh-tui/force-smart.json`. Child-local request
+headers override sidecars and inherited headers so `/resume`, rewind,
+`/model`, `/new`, and workspace ownership recompose against the target session.
+
+Native DSH spawn, fork, and continuable children inherit the parent's active
+enhancement. The overlay never registers new tools in child scope or bypasses
+the delegation `toolFilter`; child persona and delegation, sandbox, and approval
+contexts are preserved. Smart may route within the already allowed catalog.
+ForceSmart children start promoted so a one-shot delegated task cannot finish
+inside the 1024-token bootstrap and lose its complete delegated capability set.
 
 Place a custom preset at `$DSH_HOME/.agent-presets/<name>/` with an
 `agent.cordis.yml` file. Under the default DSH home this is
@@ -181,6 +230,7 @@ for the complete field reference.
 | `DSH_TUI_PERSONA` | Override the Agent persona injected by the composition |
 | `DSH_TUI_PRESET` | Override the default Agent preset for new sessions |
 | `DSH_TUI_SMART` | `1`/`0`: override the Smart enhancement default for new sessions |
+| `DSH_TUI_FORCE_SMART` | `1`/`0`: override the ForceSmart enhancement default for new sessions |
 | `DSH_SMART_RUNTIME_PATH` | Optional Smart host runtime package directory or `lib/index.js` path |
 | `DSH_TUI_THEME` | Pin a built-in (`auto`/`light`/`dark`/`dark-ansi`) or custom theme ahead of persisted selection |
 | `DSH_TUI_DISABLE_MOUSE` | Temporarily disable mouse handling in fullscreen mode |
