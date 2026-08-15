@@ -20,7 +20,7 @@ export interface Config {
     sessionId?: string;
     /** LLM provider route. The route resolves atomically (issue #67): when
      *  cordis.yml names BOTH `provider` and `model`, that pair wins; otherwise
-     *  the `/model` choice persisted in `~/.dsh-cc/model.json` wins whole;
+     *  the `/model` choice persisted in `~/.dsh-tui/model.json` wins whole;
      *  otherwise the harness defaults (`deepseek-official`). A provider-only
      *  pin never half-overrides the persisted choice. */
     provider?: string;
@@ -38,12 +38,11 @@ export interface Config {
      *  the startup status line until the first request header reports the
      *  live value. */
     effort?: string;
-    /** Show the dsh-working-activity live working line on the status bar
-     *  (consumes its log-only `activity/status` events; off hides it). */
+    /** Show the live working line derived in-process from base session events. */
     activity?: boolean;
     /** Working-activity indicator preset: `claude`/`moon`/`comet`/`dots`/…
      *  or `random` (see activityFrames.ts). When absent, the `/activity`
-     *  choice persisted in `~/.dsh-cc/working-activity.json` wins, then the
+     *  choice persisted in `~/.dsh-tui/working-activity.json` wins, then the
      *  `claude` default. */
     activityFrames?: string;
     /** Show the segmented context bar (the band under the input with the
@@ -52,16 +51,17 @@ export interface Config {
     contextBar?: boolean;
     /** Run in the terminal's alternate screen (Claude Code fullscreen layout). */
     fullscreen?: boolean;
-    /** UI language: `en` / `zh`. When absent, the `CC_TUI_LANG` env var wins,
-     *  then the `/lang` choice persisted in `~/.dsh-cc/lang.json`, then `zh`. */
+    /** UI language: `en` / `zh`. When absent, the `DSH_TUI_LANG` env var wins,
+     *  then the `/lang` choice persisted in `~/.dsh-tui/lang.json`, then `zh`. */
     lang?: string;
     /** Agent preset id new sessions compose from (standard/code/minimal/
      *  cordis/… when the roster is mounted). When absent, the `/preset` choice
-     *  persisted in `~/.dsh-cc/agent-preset.json` wins, then the roster
+     *  persisted in `~/.dsh-tui/agent-preset.json` wins, then the roster
      *  default (`standard`). */
     preset?: string;
-    /** Enable the Smart routing-suite enhancement over the selected Agent
-     *  preset. Runtime `/smart` switches persist separately from `/preset`. */
+    /** Enable Smart over the selected Agent preset. Smart is based on
+     *  dsh-routing-suite; runtime `/smart` switches persist separately from
+     *  `/preset`. */
     smart?: boolean;
     /** Shift+Tab session-mode cycle (array order IS the cycle order; index 0
      *  is the unmarked base mode). Each entry bundles any subset of the
