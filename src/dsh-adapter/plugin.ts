@@ -247,7 +247,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const meta = { cwd: sessionCwd }
   const { smart: startupSmart, forceSmart: startupForceSmart } = resolveEnhancementSelection(
     config.smart,
-    config.forceSmart,
+    config.smartPro ?? config.forceSmart,
     readSmartDefault(),
     readForceSmartDefault(),
   )
@@ -316,7 +316,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     smart,
     configuredSmart: config.smart,
     forceSmart,
-    configuredForceSmart: config.forceSmart,
+    configuredForceSmart: config.smartPro ?? config.forceSmart,
     // Shift+Tab session-mode cycle (undefined → the built-in default/
     // plan/full cycle in sessionModes.ts).
     modes: config.modes,
@@ -557,11 +557,18 @@ async function resolveAgent(
     const resumeId = SessionId(requestedSessionId)
     const existing = ctx.agents.get(resumeId)
     if (existing !== undefined) {
-      const forceSmart = forceSmartModeOf(existing.session)
+      const agentPreset = runningPresetOf(existing.session)
+      const incompatible = agentPreset === 'liangshen'
+      const forceSmart = incompatible ? false : forceSmartModeOf(existing.session)
+      const smart = incompatible ? false : forceSmart ? false : smartModeOf(existing.session)
+      if (incompatible) {
+        writeSmartSession(String(resumeId), false)
+        writeForceSmartSession(String(resumeId), false)
+      }
       return {
         agent: existing,
-        agentPreset: runningPresetOf(existing.session),
-        smart: forceSmart ? false : smartModeOf(existing.session),
+        agentPreset,
+        smart,
         forceSmart,
       }
     }
@@ -582,6 +589,8 @@ async function resolveAgent(
         agentOptions: resumeOptions,
         ...(composed.setup === undefined ? {} : { setup: composed.setup }),
       })
+      writeSmartSession(String(resumeId), composed.smart)
+      writeForceSmartSession(String(resumeId), composed.forceSmart)
       // Status-line route on resume: the route the session actually
       // continues on — a complete cordis.yml pin, else the route its own
       // request/header records carry (a bare log yields undefined and the
@@ -590,8 +599,8 @@ async function resolveAgent(
         agent: resumed.agent,
         handle: resumed,
         agentPreset: composed.agentPreset,
-        smart,
-        forceSmart,
+        smart: composed.smart,
+        forceSmart: composed.forceSmart,
         route: resumeRoute ?? recordedModelRoute(resumed.agent.session.events),
       }
     } catch (error) {
@@ -640,14 +649,14 @@ async function resolveAgent(
       `dsh-tui: failed to create agent (provider=${route.provider}, model=${route.model}): ${message}`,
     )
   })
-  writeSmartSession(String(sessionId), startupSmart)
-  writeForceSmartSession(String(sessionId), startupForceSmart)
+  writeSmartSession(String(sessionId), composed.smart)
+  writeForceSmartSession(String(sessionId), composed.forceSmart)
   return {
     agent: created.agent,
     handle: created,
     agentPreset: composed.agentPreset,
-    smart: startupSmart,
-    forceSmart: startupForceSmart,
+    smart: composed.smart,
+    forceSmart: composed.forceSmart,
     route,
   }
 }

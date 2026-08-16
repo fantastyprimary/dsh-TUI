@@ -9,7 +9,14 @@ import { registerEnhancementAgent } from './enhancementInheritance.js'
 import SmartHostRuntime from './smartRuntime.js'
 
 type RouterModule = {
-  readonly apply: (ctx: Context, config: { readonly registerTools?: boolean }) => unknown
+  readonly apply: (ctx: Context, config: {
+    readonly registerTools?: boolean
+    readonly resetAnchored?: boolean
+  }) => unknown
+}
+
+interface SmartEnhancementOptions {
+  readonly resetAnchored?: boolean
 }
 
 let routerModule: Promise<RouterModule> | undefined
@@ -46,6 +53,7 @@ export async function mountSmartEnhancement(
   hostCtx: Context,
   agentCtx: Context,
   basePreset?: string,
+  options: SmartEnhancementOptions = {},
 ): Promise<void> {
   await ensureSmartHost(hostCtx)
   // Agent-local ownership keeps Code -> Standard blank-session recomposition
@@ -56,7 +64,9 @@ export async function mountSmartEnhancement(
     await agentCtx.plugin(StrReplaceEditor, {})
   }
   const router = await loadRouter()
-  await agentCtx.plugin(router as unknown as { apply(ctx: Context, config: Record<string, never>): unknown }, {})
+  await agentCtx.plugin(router as unknown as {
+    apply(ctx: Context, config: SmartEnhancementOptions): unknown
+  }, options)
   registerEnhancementAgent(hostCtx, agentCtx.agent as Agent, 'smart', childCtx => {
     // agent/created is synchronous and precedes session-start/first assembly.
     // Never register tools in a child-local scope: DSH tool restrictions are

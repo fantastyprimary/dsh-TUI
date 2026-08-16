@@ -33,7 +33,6 @@ try {
 }
 
 const {
-  SMART_PROMPT_MARKER,
   readSmartDefault,
   readSmartSession,
   resolvePersistedSmart,
@@ -45,15 +44,15 @@ const {
 const prefsDir = join(testHome, '.dsh-tui')
 const prefsFile = join(prefsDir, 'smart.json')
 
-function requestHeader(seq, smart) {
+function requestHeader(seq, system = 'base system') {
   return {
     type: 'request/header',
     seq,
     time: seq,
     data: {
       header: {
-        system: smart ? `base\n${SMART_PROMPT_MARKER}\nrouter` : 'base only',
-        tools: smart ? [{ name: 'dev_smart_status' }] : [{ name: 'read' }],
+        system,
+        tools: [{ name: 'read' }],
       },
     },
   }
@@ -77,33 +76,32 @@ test('Smart default and per-session state persist independently', () => {
   assert.equal(readSmartSession('alpha'), false)
 })
 
-test('a fork child uses its sidecar even when inherited legacy headers disagree', () => {
-  const inherited = requestHeader(3, true)
+test('a fork child uses only its sidecar even when inherited prompts disagree', () => {
+  const inherited = requestHeader(3, 'Smart task routing is active')
   const child = session('child-before-request', 4, [inherited])
 
   assert.equal(smartModeOf(child, false), false)
   assert.equal(smartModeOf(child, true), true)
-  assert.equal(smartModeOf(child, undefined), true)
+  assert.equal(smartModeOf(child, undefined), false)
 })
 
-test('the sidecar remains authoritative over child-local legacy headers', () => {
-  const inheritedOn = requestHeader(3, true)
+test('the sidecar remains authoritative over child-local prompt text', () => {
+  const inheritedOn = requestHeader(3, 'Smart task routing is active')
   assert.equal(
-    smartModeOf(session('child-off', 4, [inheritedOn, requestHeader(4, false)]), true),
+    smartModeOf(session('child-off', 4, [inheritedOn, requestHeader(4)]), true),
     true,
   )
 
-  const inheritedOff = requestHeader(3, false)
+  const inheritedOff = requestHeader(3)
   assert.equal(
-    smartModeOf(session('child-on', 4, [inheritedOff, requestHeader(4, true)]), false),
+    smartModeOf(session('child-on', 4, [inheritedOff, requestHeader(4, 'Smart task routing is active')]), false),
     false,
   )
 })
 
-test('legacy sessions derive Smart from request headers only without a sidecar', () => {
-  assert.equal(smartModeOf(session('ordinary-on', undefined, [requestHeader(0, true)]), undefined), true)
+test('request headers never become an enhancement state channel', () => {
   assert.equal(
-    smartModeOf(session('ordinary-off', undefined, [requestHeader(0, true), requestHeader(1, false)]), undefined),
+    smartModeOf(session('ordinary-on', undefined, [requestHeader(0, 'Smart task routing is active')]), undefined),
     false,
   )
   assert.equal(smartModeOf(session('legacy-empty', undefined, []), undefined), false)
@@ -111,7 +109,7 @@ test('legacy sessions derive Smart from request headers only without a sidecar',
 
 test('persisted resolution applies sidecar precedence', async () => {
   writeSmartSession('persisted-child', true)
-  const persisted = session('persisted-child', 2, [requestHeader(1, true), requestHeader(2, false)])
+  const persisted = session('persisted-child', 2, [requestHeader(1, 'contradictory prompt'), requestHeader(2)])
   const ctx = {
     get(name) {
       if (name !== 'sessionPersistence') return undefined
@@ -126,11 +124,11 @@ test('persisted resolution applies sidecar precedence', async () => {
   assert.equal(await resolvePersistedSmart(ctx, 'persisted-child'), true)
 })
 
-test('marker-free request headers retain explicit sidecar state', () => {
-  const markerFree = session('marker-free', 0, [requestHeader(0, false)])
-  assert.equal(smartModeOf(markerFree, true), true)
-  assert.equal(smartModeOf(markerFree, false), false)
-  assert.equal(smartModeOf(markerFree, undefined), false)
+test('request headers retain explicit sidecar state', () => {
+  const promptOnly = session('prompt-only', 0, [requestHeader(0)])
+  assert.equal(smartModeOf(promptOnly, true), true)
+  assert.equal(smartModeOf(promptOnly, false), false)
+  assert.equal(smartModeOf(promptOnly, undefined), false)
 })
 
 test('corrupt preference data fails closed', () => {

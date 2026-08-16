@@ -90,7 +90,7 @@ stdout 打印诊断；使用 stderr 的 `DSH_TUI_DEBUG` 或 `DSH_TUI_RENDER_LOG`
 | `~/.dsh-tui/working-activity.json` | 工作状态动画选择 |
 | `~/.dsh-tui/agent-preset.json` | 新会话默认 Agent preset |
 | `~/.dsh-tui/smart.json` | Smart 默认值与每个 replacement session 的状态 |
-| `~/.dsh-tui/force-smart.json` | ForceSmart 默认值与每个 replacement session 的状态 |
+| `~/.dsh-tui/force-smart.json` | Smart-Pro 默认值与每个 replacement session 的状态 |
 
 `DSH_TUI_SESSION_ROOT` 在两种组合中都改写 JSONL 根目录。profile 默认使用
 `$DSH_HOME/sessions`（通常为 `~/.dsh/sessions/`）；直接运行根目录的
@@ -125,20 +125,12 @@ answerer（`approval/request` waterfall），仅允许一次/拒绝两种决定�
 - 注入到 system prompt 的插件上下文不会在 UI 中单独列出，而是计入 system/context
   分段。
 - `/model` 通过 session fork 切换，不是原位修改；旧会话会留在 `/resume`。
-- `/smart` 与 `/force-smart` 通过单次 fork 切换互斥增强层。子会话继承完整历史、
-  route、cwd、preset 与 plan/goal 状态；新的 `request/header` 由基础 preset + 唯一
-  overlay 全量组装，旧 header 事件不会变成模型消息。Smart 在 V4 Pro 上选择
-  router-pro，Flash/未知模型选择 Router Standard；ForceSmart 保持独立 Anchored
-  控制器。两者的首轮表面都沿用了 `dsh-anchored-standard` 的两阶段思路，但
-  ForceSmart 是唯一产品名，参考项目名不成为第三种模式。DSH 原生子代理通过运行时
-  继承桥继承父增强，但 overlay 不向 child scope
-  新增工具，且保留 persona 与 delegation/sandbox/approval contexts。Smart 在既有
-  权限目录内路由；ForceSmart 子代理直接从 promoted 阶段开始，避免一次性委托被
-  bootstrap 上限截断。晋升后恢复基础 preset 的 subagent/workflow/skill 工具与 contexts。
-- 平台 shell 保持真实能力边界：Smart 在 win32 选择 `pwsh`，在 WSL2/Linux/macOS
-  选择 `bash`；ForceSmart 的 win32 顶层 bootstrap 使用 agent-scoped Git Bash adapter，
-  其余平台使用 DSH persistent Bash。晋升后恢复基础 preset 目录，Windows 再次看到
-  `pwsh`；Git Bash 不可用时告警并 fail-open。
+- Smart 与 Smart-Pro 拥有独立的资产目录、mount 模块和 sidecar；只共享 channel 的
+  互斥仲裁、session fork 和状态展示。每次切换只组合基础 preset + 一个 overlay，新的
+  `request/header` 全量重建，旧 header 不进入模型消息。子代理继承父增强，但 overlay
+  不向 child scope 新增工具，并保留 persona 与 delegation/sandbox/approval contexts。
+  具体路由、晋升、平台 shell 和 `liangshen` 兼容边界统一见
+  [配置参考](configuration.md#smart-与-smart-pro-增强)。
 - `Ctrl+V` 读剪贴板按平台分派：Windows 用 PowerShell `Get-Clipboard`（剪贴板被
   其他程序锁定时重试后可能静默失败并显示为空）；macOS 用 `osascript`/`pbpaste`；
   Linux/Unix 按会话顺序尝试 `wl-paste`/`xclip`/`xsel`（工具缺失跳过、会话

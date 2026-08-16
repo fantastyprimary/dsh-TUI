@@ -1,9 +1,11 @@
 /**
- * ForceSmart's Windows bootstrap shell. DSH's persistent PTY Bash backend is
+ * Smart-Pro's Windows bootstrap shell. DSH's persistent PTY Bash backend is
  * unavailable on win32, so this agent-scoped tool executes a real Git Bash
  * through the host subprocess service. It is adapted from Anchored Standard's
  * custom-bash adapter; see NOTICE for provenance.
  */
+
+import { readFileSync } from 'node:fs'
 
 export const name = 'dsh-tui-force-smart-windows-bash'
 export const inject = ['subprocess', 'tools']
@@ -12,7 +14,7 @@ const DEFAULT_TIMEOUT_MS = 300_000
 const DEFAULT_MAX_OUTPUT_BYTES = 64_000
 
 export const WINDOWS_BASH_DESCRIPTION = [
-  'Run commands in a bash shell (Git Bash on Windows)',
+  'Run commands in a bash shell',
   '* When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.',
   "* You don't have access to the internet via this tool.",
   '* State does NOT persist across command calls: each call runs in a fresh shell.',
@@ -50,6 +52,19 @@ export function windowsBashCandidates(config = {}, environment = process.env) {
     addCandidate(candidates, seen, `${environment.LOCALAPPDATA}\\Programs\\Git\\bin\\bash.exe`)
     addCandidate(candidates, seen, `${environment.LOCALAPPDATA}\\Programs\\Git\\usr\\bin\\bash.exe`)
   }
+  // Scoop keeps Git under its own root; SCOOP is exported by some setups, but
+  // the per-user default location works without it.
+  const scoopRoots = []
+  if (typeof environment.SCOOP === 'string' && environment.SCOOP.length > 0) {
+    scoopRoots.push(environment.SCOOP)
+  }
+  if (typeof environment.USERPROFILE === 'string' && environment.USERPROFILE.length > 0) {
+    scoopRoots.push(`${environment.USERPROFILE}\\scoop`)
+  }
+  for (const root of scoopRoots) {
+    addCandidate(candidates, seen, `${root}\\apps\\git\\current\\bin\\bash.exe`)
+    addCandidate(candidates, seen, `${root}\\apps\\git\\current\\usr\\bin\\bash.exe`)
+  }
   addCandidate(candidates, seen, 'bash')
   return candidates
 }
@@ -59,10 +74,72 @@ export function isWindowsSubsystemLauncher(path) {
   return /[\\/]windows[\\/](?:system32|sysnative)[\\/]bash\.exe$/i.test(path)
 }
 
+/**
+ * Scoop-style shim launchers keep the real target in a sibling `.shim` text
+ * file (`path = "..."`); follow it so a PATH-resolved git.exe still yields
+ * its installation tree.
+ */
+export function resolveShimTarget(exePath, reader = readFileSync) {
+  for (const sidecar of [exePath.replace(/\.exe$/i, '') + '.shim', `${exePath}.shim`]) {
+    try {
+      const text = reader(sidecar, 'utf8')
+      const match = text.match(/^\s*path\s*=\s*"?(.+?)"?\s*$/mi)
+      if (match !== null) return match[1]
+    } catch { /* not a shim launcher */ }
+  }
+  return exePath
+}
+
+/** Bash candidates derived from a git.exe inside a Git for Windows tree. */
+export function bashCandidatesFromGit(gitPath) {
+  if (typeof gitPath !== 'string' || gitPath.length === 0) return []
+  const parts = gitPath.replace(/\//g, '\\').split('\\').filter(part => part.length > 0)
+  if (parts.at(-1)?.toLowerCase() !== 'git.exe') return []
+  const roots = []
+  const push = root => {
+    if (root.length > 0 && !roots.includes(root)) roots.push(root)
+  }
+  // <root>\cmd\git.exe and <root>\bin\git.exe -> <root>
+  if (parts.length >= 3) push(parts.slice(0, -2).join('\\'))
+  // <root>\mingw64\bin\git.exe -> <root>; a plain <root>\cmd layout must not
+  // also strip its real root.
+  if (parts.length >= 5
+    && parts.at(-2)?.toLowerCase() === 'bin'
+    && /^mingw(32|64)$/.test(parts.at(-3) ?? '')) {
+    push(parts.slice(0, -3).join('\\'))
+  }
+  const candidates = []
+  for (const root of roots) {
+    candidates.push(`${root}\\bin\\bash.exe`, `${root}\\usr\\bin\\bash.exe`)
+  }
+  return candidates
+}
+
+/**
+ * Follow the PATH-visible git executable to its installation tree: every
+ * Windows Git install ships git-bash next to git, wherever it was installed,
+ * so this covers installer, portable, and Scoop layouts without hardcoding.
+ */
+async function gitTreeCandidates(subprocess, failures) {
+  let gitPath
+  try {
+    gitPath = await subprocess.resolveExecutable('git')
+  } catch (error) {
+    failures.push(`git: ${error instanceof Error ? error.message : String(error)}`)
+    return []
+  }
+  return bashCandidatesFromGit(resolveShimTarget(gitPath))
+}
+
 /** Resolve Git Bash without accidentally accepting the WSL compatibility shim. */
 export async function resolveWindowsBash(subprocess, config = {}, environment = process.env) {
   const failures = []
-  for (const candidate of windowsBashCandidates(config, environment)) {
+  const explicit = typeof config.bashPath === 'string' && config.bashPath.length > 0
+  const candidates = explicit
+    // An explicit path is honored as-is: never silently substitute a guess.
+    ? windowsBashCandidates(config, environment)
+    : [...await gitTreeCandidates(subprocess, failures), ...windowsBashCandidates(config, environment)]
+  for (const candidate of candidates) {
     try {
       const resolved = await subprocess.resolveExecutable(candidate)
       if (isWindowsSubsystemLauncher(resolved)) {
@@ -91,11 +168,14 @@ export async function apply(ctx, config = {}) {
     name: 'bash',
     description: WINDOWS_BASH_DESCRIPTION,
     parameters: {
-      command: {
-        type: 'string',
-        required: true,
-        description: 'The bash command to run. Relative path is preferred in the command.',
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description: 'The bash command to run. Relative path is preferred in the command.',
+        },
       },
+      required: ['command'],
     },
     timeoutMs,
     output: {

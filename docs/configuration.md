@@ -39,7 +39,7 @@ Profile 启动按顺序叠加 `dsh-base`、已安装 bundle、`@deepseek-harness
     fullscreen: false
     preset: !!js process.env.DSH_TUI_PRESET ?? undefined
     smart: !!js "process.env.DSH_TUI_SMART === '1' ? true : process.env.DSH_TUI_SMART === '0' ? false : undefined"
-    forceSmart: !!js "process.env.DSH_TUI_FORCE_SMART === '1' ? true : process.env.DSH_TUI_FORCE_SMART === '0' ? false : undefined"
+    smartPro: !!js "process.env.DSH_TUI_SMART_PRO === '1' ? true : process.env.DSH_TUI_SMART_PRO === '0' ? false : undefined"
     workspace: !!js process.env.DSH_TUI_WORKSPACE_TARGET ?? undefined
     sessionId: !!js process.env.DSH_TUI_RESUME_SESSION ?? undefined
 ```
@@ -58,7 +58,7 @@ Profile 启动按顺序叠加 `dsh-base`、已安装 bundle、`@deepseek-harness
 | `fullscreen` | `false` | `true` 使用 alternate screen、应用内滚动和鼠标选区；`false` 使用 inline 模式 |
 | `preset` | 名册默认 `standard` | 新会话 Agent preset；显式配置优先于持久化偏好 |
 | `smart` | 持久化选择或 `false` | 在所选 Agent preset 上启用 Smart 增强 |
-| `forceSmart` | 持久化选择或 `false` | 在所选 Agent preset 上启用 ForceSmart；与 Smart 互斥 |
+| `smartPro` | 持久化选择或 `false` | 在所选 Agent preset 上启用 Smart-Pro；与 Smart 互斥 |
 | `sessionId` | 未设置 | 要恢复的会话 ID，通常由 Windows `--resume` 启动器注入 |
 
 ## 工作状态行
@@ -100,19 +100,32 @@ Profile 启动按顺序叠加 `dsh-base`、已安装 bundle、`@deepseek-harness
   dsh-tui 托管的目录不会被覆盖。
 
 
-### Smart 与 ForceSmart 增强
+### Smart 与 Smart-Pro 增强
 
-Smart 不是第五个 Agent preset，而是叠加在 `standard`、`code`、`minimal`、
-`cordis` 或用户 preset 上的正交增强：`/preset` 决定基础能力，`/smart on|off`
-决定是否启用 Smart。运行时切换会在当前历史末尾 fork；对话消息保持不变，
-目标 agent 会重新组装 agent-scoped system prompt、动态 context、工具 schema 和相关
-服务，旧会话仍可在 `/resume` 恢复。`smart: true` 或 `DSH_TUI_SMART=1` 可让新会话
-启动即启用。
+Smart 与 Smart-Pro 是两套独立 overlay，不是额外的 Agent preset，也不共享路由资产、
+bootstrap 实现或持久状态。它们只共享 TUI 的开关仲裁、session fork 和状态展示基础设施。
+`/preset` 决定基础能力；运行时切换 overlay 会在当前历史末尾 fork，保留对话并重新组装
+目标 agent 的 prompt、context、工具 schema 和相关服务。
+
+| 模式 | 入口 | 组合形态 | 主要调校目标 | 首轮/晋升语义 |
+|---|---|---|---|---|
+| Smart | `/smart` | 独立路由 overlay | DeepSeek V4 Flash | Router Standard/Pro；工具调用或无工具首答后恢复完整表面 |
+| Smart-Pro | `/smart-pro` | 独立 Anchored overlay | DeepSeek V4 Pro | Minimal 双工具与 1024 首轮预算；按 Anchored 边界晋升 |
+| `liangshen` | `/preset liangshen` | 上游 standalone preset | 由上游 preset 定义 | 使用自己的工具面、晋升与 compaction 语义；不与 overlay 叠加 |
+
+Smart 与 Smart-Pro 都只针对 DeepSeek V4 系列调校。Smart 优先适配 V4 Flash，
+Smart-Pro 优先适配 V4 Pro。TUI 会按模型路由字符串执行硬门控，只接受可识别的
+DeepSeek V4 系列名称；自定义 provider 的别名也需要保留 `deepseek-v4` 形式。
+
+#### Smart
+
+使用 `/smart on|off|status`、`smart: true` 或 `DSH_TUI_SMART=1` 控制。
 
 Smart 基于 [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite)，固定到
 suite `eb1b00d` 与历史 Router Pro 提交 `7426c9c`。上游已删除 `v0.3.0` 标签；
 当前 suite `a09eb0a` 又把 preset 指针回退到 Router v0.2，因此该回退经过审计后被
-明确排除，避免 DeepSeek V4 Pro 策略被静默移除。Smart 在 `deepseek-v4-pro` 上使用
+明确排除，避免 DeepSeek V4 Pro 策略被静默移除。Smart 的主要目标是 V4 Flash；在
+`deepseek-v4-pro` 上仍使用
 Router Pro 策略：维护/修复选择 RL shell/editor 接口，新建/构建选择 doer write-first 接口，
 无明确证据时使用 router-v2 few-shot；Flash 与未知模型继续使用 Router Standard。
 这些首轮 prompt/context 与工具面只在基础 preset 为 `standard` 时启用；其他 preset
@@ -134,51 +147,59 @@ service 和其他副作用可能是进程级；`/smart off` 会移除 agent-scop
 并隐藏已知 host 管理工具与 context，但不会卸载任意已注入插件。完全隔离需要使用独立
 进程/profile；关闭已激活 host 的全部进程级行为需要重启当前进程。
 
-ForceSmart 同样不是 preset 或 Shift+Tab session mode；使用 `/force-smart on|off|status`、
-`forceSmart: true` 或 `DSH_TUI_FORCE_SMART=1` 控制。它参考固定到 `d97bec9` 的
+#### Smart-Pro
+
+Smart-Pro 同样不是 Shift+Tab session mode；使用 `/smart-pro on|off|status`、
+`smartPro: true` 或 `DSH_TUI_SMART_PRO=1` 控制。它参考固定到 `d97bec9` 的
 [dsh-anchored-standard](https://github.com/xiaobright/dsh-anchored-standard/blob/d97bec91a3d668f4cf1d03ee5f20aae84fb6f85c/README.zh-CN.md)
 与 [dsh-web-ui 的“梁神模式”](https://github.com/zhu1090093659/dsh-web-ui/blob/3647a33fa467e0335260468614f6eed04b196c38/packages/dsh-liangshen/README.zh.md)，
-但产品、命令与界面名称始终只使用 ForceSmart。截至 2026-08-16，dsh-web-ui 主线仍
-等于该固定提交；开放 PR #253 的缺工具 fail-open 已由 ForceSmart 覆盖，但其
+但产品、命令与界面名称始终只使用 Smart-Pro。截至 2026-08-16，dsh-web-ui 主线仍
+等于该固定提交；开放 PR #253 的缺工具 fail-open 已由 Smart-Pro 覆盖，但其
 compaction 后重新收窄工具的方案会破坏 plan/goal/子代理边界，故不采用。在兼容的
 干净首轮，system prompt
 精确对齐官方 Minimal 的单行 persona，临时只暴露 `bash` 和 `str_replace_editor`，并将
 两者的模型可见提示与 schema 对齐官方 Minimal；执行层优先复用基础 preset 已允许的
 兼容工具，顶层缺少 editor 时挂载官方实现，非 Windows 顶层缺少 Bash 时挂载官方
-persistent Bash。Windows 原生环境缺少 Bash 时，ForceSmart 按 Anchored 的做法在当前
+persistent Bash。Windows 原生环境缺少 Bash 时，Smart-Pro 按 Anchored 的做法在当前
 顶层 agent scope 注册真实 Git Bash executor，通过 DSH subprocess 执行 `bash -c`；晋升后
 从模型可见目录隐藏该临时工具并恢复基础 preset 的 `pwsh` 与完整目录，agent dispose 时
 再由 Cordis scope 回收执行器。它会依次检查 Git for Windows
 常见安装路径和 `PATH`，并拒绝把 System32 的 WSL launcher 当成 Git Bash；可用
-`DSH_TUI_FORCE_SMART_BASH_PATH` 指定自定义绝对路径。Windows executor 每次调用启动新
+`DSH_TUI_SMART_PRO_BASH_PATH` 指定自定义绝对路径。Windows executor 每次调用启动新
 shell，且没有 OS sandbox confinement；找不到 Git Bash 或注册失败时会明确告警并完整
 fail-open。WSL2 的 `process.platform` 是 Linux，因此走官方 persistent Bash 路径，不依赖
-Windows Git Bash。ForceSmart 同时延后普通 agent instructions/skill catalog，并把请求预算
+Windows Git Bash。Smart-Pro 同时延后普通 agent instructions/skill catalog，并把请求预算
 设为 1024；首次工具轨迹满足 Anchored 门控、首答无工具、turn 结束或安全兜底后，恢复
 基础 preset 的完整 sections、contexts、工具及原请求预算。已有历史的 fork/resume 直接
-使用恢复后的表面。Anchored 当前主线默认不封顶；ForceSmart 为保持 overlay 解耦，
+使用恢复后的表面。Anchored 当前主线默认不封顶；Smart-Pro 为保持 overlay 解耦，
 不替换基础 preset 的长期执行层，但首轮模型可见的两工具 schema 与 Minimal 对齐，并
 有意保留固定参考组合中的 1024 首轮预算。Windows 不会把 `pwsh` 冒充 Bash；无法形成
 兼容两工具表面时直接 fail-open。Smart 在 Windows 使用原生 `pwsh`，在 WSL2/Linux/macOS
-使用原生 `bash`；ForceSmart 在这些平台分别使用上述 Git Bash 或 persistent Bash 首轮后
-恢复基础 preset。活跃 `/plan`、活跃 `/goal` 与所有 ForceSmart 子代理
+使用原生 `bash`；Smart-Pro 在这些平台分别使用上述 Git Bash 或 persistent Bash 首轮后
+恢复基础 preset。活跃 `/plan`、活跃 `/goal` 与所有 Smart-Pro 子代理
 会直接从 promoted 阶段完整放行，
-因此 `exit_plan_mode`、goal、subagent 和 workflow 不会失去退出/控制路径。ForceSmart 不
-检查或限制模型 ID：非 V4 Pro 模型静默可用，但当前实验调校证据主要来自正式版
-DeepSeek V4 Pro。
+因此 `exit_plan_mode`、goal、subagent 和 workflow 不会失去退出/控制路径。Smart-Pro
+主要面向 DeepSeek V4 Pro，并与 Smart 共用上述 DeepSeek V4 模型门控。
 
-Smart 与 ForceSmart 互斥。`/smart on` 会自动关闭 ForceSmart，`/force-smart on` 会自动
+#### 共享会话与状态规则
+
+Smart 与 Smart-Pro 互斥。`/smart on` 会自动关闭 Smart-Pro，`/smart-pro on` 会自动
 关闭 Smart，且每次只创建一个 replacement session；关闭当前增强不会恢复之前的另一个。
-显式配置优先于持久默认，若两项显式同时为 `true`，ForceSmart 胜出。状态分别保存在
-`~/.dsh-tui/smart.json` 与 `~/.dsh-tui/force-smart.json`，每个 session 的 sidecar 记录是
-新会话的权威状态源；新请求不会在模型可见的 system prompt 中写入内部模式 marker 或
-说明文字。旧版 `request/header` 中的 marker 只在 sidecar 缺失时用于迁移恢复，确保
-`/resume`、rewind、`/model`、`/new` 与 workspace 归属按目标 session 重组。启用增强时，
-输入箭头和常驻状态栏会显示 Smart 或 ForceSmart；默认状态不增加标记。
+上游 `liangshen` 自带另一套 Minimal 工具面与晋升状态机，因此作为独立 preset 使用，
+不能再叠加 Smart 或 Smart-Pro。交互命令会拒绝这种组合；启动、`/new` 或 `/resume`
+遇到旧偏好组合时以 `liangshen` 为准，并将该 session 的两个增强状态归一为关闭。
+显式配置优先于持久默认，若两项显式同时为 `true`，Smart-Pro 胜出。默认状态文件为
+`~/.dsh-tui/smart.json` 与 `~/.dsh-tui/force-smart.json`；设置 `DSH_TUI_DATA_DIR`
+时改用该隔离目录。每个 session 的 sidecar 记录是
+唯一权威状态源；`request/header` 与模型可见的 system prompt 都不承担模式状态。`/resume`、
+rewind、`/model`、`/new` 与 workspace 归属均按目标 session 的 sidecar 重组。启用增强时，
+输入框会显示 Smart 或 Smart-Pro 标签并切换边框颜色；成功进入增强模式时标签和箭头
+播放一次短脉冲动画，幂等命令或切换失败不会触发假动画。常驻状态栏也会显示对应状态；
+默认状态不增加标记。
 
 DSH 原生 spawn、fork 与 continuable 子代理继承父级当前增强。增强不会在 child scope
 新增工具或绕过委派 `toolFilter`；子代理自己的 persona、delegation、sandbox 与 approval
-contexts 始终保留。Smart 可在已允许的目录内路由；ForceSmart 子代理直接从 promoted
+contexts 始终保留。Smart 可在已允许的目录内路由；Smart-Pro 子代理直接从 promoted
 阶段开始，避免一次性委托在 1024-token bootstrap 中结束后永远无法恢复完整能力。
 
 自定义 preset 放在 `$DSH_HOME/.agent-presets/<name>/`，目录中应包含
@@ -229,13 +250,14 @@ Profile 模式不再使用旧的 `DSH_TUI_COMPACT_RATIO`、
 | `DSH_TUI_PERSONA` | 覆盖组合注入的 Agent persona |
 | `DSH_TUI_PRESET` | 覆盖新会话默认 Agent preset |
 | `DSH_TUI_SMART` | `1`/`0`：覆盖新会话 Smart 增强默认值 |
-| `DSH_TUI_FORCE_SMART` | `1`/`0`：覆盖新会话 ForceSmart 增强默认值 |
-| `DSH_TUI_FORCE_SMART_BASH_PATH` | Windows 可选：ForceSmart 首轮使用的 Git Bash `bash.exe` 绝对路径 |
+| `DSH_TUI_SMART_PRO` | `1`/`0`：覆盖新会话 Smart-Pro 增强默认值 |
+| `DSH_TUI_SMART_PRO_BASH_PATH` | Windows 可选：Smart-Pro 首轮使用的 Git Bash `bash.exe` 绝对路径 |
 | `DSH_SMART_RUNTIME_PATH` | Smart 可选 host runtime 包目录或 `lib/index.js` 路径 |
 | `DSH_TUI_THEME` | 锁定内置（`auto`/`light`/`dark`/`dark-ansi`）或自定义主题，优先于持久化选择 |
 | `DSH_TUI_DISABLE_MOUSE` | 在 fullscreen 模式临时关闭鼠标处理 |
 | `DSH_TUI_RESUME_SESSION` | 启动时恢复指定会话，通常由启动器设置 |
 | `DSH_TUI_WORKSPACE_TARGET` | 启动时解析的工作区路径或 URI，通常由 `dsh-tui <目标>` 设置 |
+| `DSH_TUI_DATA_DIR` | 覆盖主题、历史、resume 指针及 Smart/Smart-Pro sidecar 的数据目录；设置后不从旧 `~/.dsh-cc` 自动迁移 |
 | `DSH_TUI_SESSION_ROOT` | 覆盖 JSONL 会话根目录；profile 默认 `$DSH_HOME/sessions`，裸 `cordis.yml` 默认 `~/.dsh-tui/sessions` |
 | `DSH_PERMISSION_MODE` | 非 Windows 平台覆盖 sandbox policy，例如 `workspace-write` 或 `danger-full-access` |
 | `DSH_TUI_WORKSPACE` | Windows `dsh-tui.cmd` 采用的工作目录 |

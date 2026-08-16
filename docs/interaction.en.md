@@ -154,11 +154,13 @@ DSH has no in-place model-switch API. The old session remains in `/resume`.
 `/preset` switches in place only for a blank session. In a started session,
 the choice becomes the default for the next `/new` or launch.
 
-`/smart on|off` is independent of the preset and always switches through a
-fork. The replacement agent preserves the conversation and base preset while
-reassembling prompt, context, tools, and services for the target Smart state;
-the old session remains in `/resume`. See
-[Configuration](configuration.en.md#smart-enhancement).
+`/smart on|off|status` and `/smart-pro on|off|status` control two independent,
+mutually exclusive overlays. Both switch through a fork: the replacement agent
+preserves the conversation and base preset while reassembling prompt, context,
+tools, and services for the selected mode. The old session remains in
+`/resume`. The standalone `liangshen` preset cannot be stacked with either
+overlay. See [Configuration](configuration.en.md#smart-and-smart-pro-enhancements)
+for the canonical comparison.
 
 ### Workspaces
 

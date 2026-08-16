@@ -49,12 +49,12 @@ export function StatusLine({
 
   const usage = channel.lastUsage
   const contextParts: React.ReactNode[] = []
-  // Smart and ForceSmart are enhancements over the selected preset, so keep
+  // Smart and Smart-Pro are enhancements over the selected preset, so keep
   // their state visible without encoding it in the model-facing prompt.
   if (channel.forceSmart) {
     contextParts.push(
       <Text key="enhancement" color="warning" bold>
-        ForceSmart
+        Smart-Pro
       </Text>,
     )
   } else if (channel.smart) {

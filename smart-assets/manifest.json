@@ -33,7 +33,7 @@
             "agent.cordis.yml": "ade057831fa1b9297f8cb41a00b0bb96b9467d4909aeb90f91d8a55a40c058b1",
             "preset.yml": "335c8e7d7cc42b1f7a5e3fbe4be35fa89998b297728398bb37074923622fd769",
             "router-bootstrap.mjs": "a64ef30346cbd73cabe4c92598794ac70c3842184815f907c0033483022fd03e",
-            "router-bootstrap-v1.mjs": "62d9ba24c44a4c4cee5031b2e262d9f1aa404778bda4152aae4602a986f17458",
+            "router-bootstrap-v1.mjs": "6405a7a118812eca197dc4ca36ce0574457a4206f296c23cb21d7bb58a4b97b3",
             "router-core.mjs": "b2c3851f099d174e0b3e3cfe6a10f52a5f3299c8bb419473e2f7388c45ae1416"
           }
         },
@@ -101,13 +101,18 @@
         },
         {
           "file": "router-standard/router-bootstrap-v1.mjs",
+          "type": "agent-ownership-boundary",
+          "reason": "Prompt assembly is bound to the Agent that mounted the Smart overlay so a live or disposing fork cannot route another session's system prompt or tool catalog."
+        },
+        {
+          "file": "router-standard/router-bootstrap-v1.mjs",
           "type": "workflow-guidance-isolation",
           "reason": "Active plan and goal drivers keep sole ownership of next-step policy. Smart still records the real user text for routing but does not append execute-now or classification guidance while either workflow is active."
         },
         {
           "file": "router-standard/router-bootstrap-v1.mjs",
           "type": "promotion-context-restore",
-          "reason": "Only a genuinely fresh Standard first request uses the Anchored surface. A durable tool call, a completed or tool-less response, or inherited fork history restores the base preset's complete sections, contexts, and tool catalog from persisted session state."
+          "reason": "A durable tool call or completed/tool-less response restores the base preset's complete sections, contexts, and tools. Ordinary forks and resume retain that durable promotion, while explicit Smart entry inherits the conversation but resets the new mode's Anchored phase."
         },
         {
           "file": "router-standard/router-bootstrap-v1.mjs",

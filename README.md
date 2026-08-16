@@ -137,7 +137,7 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 |---|---|
 | 会话 | `/new` 新会话 · `/resume` 会话浏览器（搜索、预览、跨项目、折叠子 agent 运行） · `/rename` 重命名会话 · `/workspace resume|rename|open` 管理工作区 · `/clear` 清屏 · `/compact` 压缩 · `/export` 导出 Markdown · `/trace` 轨迹场景（亦可 `Ctrl+T`） |
 | 状态 | `/status` 会话信息 · `/cost` token 用量 · `/doctor` 环境自检 · `/config` 配置来源 · `/init` 创建 AGENTS.md |
-| 模型/Agent | `/model` 选择器 · `/preset` 官方预设 · `/smart` 路由增强 · `/force-smart` 锚定增强 · `/thinking` 思考显示 · `/tokens` token 明细 · `/theme` 主题选择器 · `/lang` 中英界面切换 |
+| 模型/Agent | `/model` 选择器 · `/preset` 官方预设 · `/smart` 路由增强 · `/smart-pro` 锚定增强 · `/thinking` 思考显示 · `/tokens` token 明细 · `/theme` 主题选择器 · `/lang` 中英界面切换 |
 | 账号/策略 | `/provider` 添加模型提供方 · `/login` 凭证状态 · `/logout` 登出说明 · `/permissions` 权限说明 · `/add-dir` 文件策略范围 · `/hooks` · `/mcp` · `/memory` |
 | 技能 | `/audit` 代码审计 · `/bug` bug 报告 · `/review` 代码评审 · `/practice` 编程练习 · `/pr_comments` PR 评论 · `/release-notes` 发布说明 · `/vuln-check` 漏洞检查 |
 | 其它 | `/agents` 子代理列表 · `/update` 自动更新并重启 · `/vim` · `/terminal-setup` · `/connect` · `/help` · `/exit` |
@@ -161,21 +161,11 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 ## 配置与扩展
 
  - **Agent preset 与智能增强**：四种官方 Agent 模式以及 TUI 随包提供的
-  `liangshen`（梁神模式）由 `/preset` 选择；`/smart`
-  叠加基于 `dsh-routing-suite` 的 Smart，`/force-smart` 叠加面向 DeepSeek V4 Pro
-  调校的 ForceSmart Anchored 控制器。两者互斥，开启一个会用一次完整 session fork
-  自动关闭另一个；prompt、context、工具、route、工作目录和历史会重新组装，不会向
-  preset 名册加入额外模式。上游 `liangshen` 是可直接选择的独立 preset；ForceSmart
-  是叠加在当前 base preset 上的增强，两者不是别名。Smart 内部按模型选择 Router
-  Standard/Router Pro；Smart 与 ForceSmart 的首轮控制都参考 Anchored。Smart 在 Windows
-  使用 `pwsh`、在 WSL2/Linux/macOS 使用 `bash`；ForceSmart 在原生 Windows 用真实
-  Git Bash 完成 Minimal 双工具首轮并在晋升后恢复 `pwsh`，其他三类环境使用官方
-  persistent Bash。
-  `/plan`、`/goal` 和原生 spawn/fork/continuable 子代理保留权限、上下文与工具边界。
-  `/preset` 仍只允许空白会话切换。preset 和两个增强的默认值分别保存在
-  `~/.dsh-tui/agent-preset.json`、`smart.json`、`force-smart.json`；`/model` 的选择
-  保存在 `~/.dsh-tui/model.json`。
-  详见[配置参考](docs/configuration.md#agent-preset)。
+  `liangshen`（梁神模式）由 `/preset` 选择；`/smart` 与 `/smart-pro` 分别启用相互
+  独立的 Smart 路由和 Smart-Pro Anchored overlay。两个 overlay 互斥，通过完整
+  session fork 切换，并保留历史、route、cwd、preset 与工作流边界。`liangshen` 是
+  上游独立 preset，不是任一 overlay 的别名，也不能与其叠加。完整的模式对照、晋升
+  条件、平台 shell 和持久化规则统一见[配置参考](docs/configuration.md#smart-与-smart-pro-增强)。
 - **自定义主题**：`/theme` 选择器（`auto` 跟随系统/终端背景，内置 `light` / `dark` /
   `dark-ansi`），也支持 `~/.dsh-tui/themes/<名字>.json` 自定义主题，选中即热切换
   并持久化；`DSH_TUI_THEME` 环境变量 > 持久化选择 > OSC 11 终端背景自动检测。

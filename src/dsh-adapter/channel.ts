@@ -52,7 +52,7 @@ import { resolveEnhancementSelection } from '../enhancementPrefs.js'
 import { isPresetName } from '../components/activityFrames.js'
 import { existsSync, statSync, writeFileSync } from 'node:fs'
 import { logForDebugging } from '../utils/debug.js'
-import { homeDir, LEGACY_DATA_DIR } from '../utils/paths.js'
+import { DATA_DIR, DATA_DIR_OVERRIDDEN, homeDir, LEGACY_DATA_DIR } from '../utils/paths.js'
 import { extractMentions } from '../utils/mentions.js'
 import { t } from '../i18n.js'
 import { modeDisplayName, resolveSessionModes, type SessionModeSpec } from '../sessionModes.js'
@@ -1407,6 +1407,12 @@ export function createChannel(
     state.emit()
   }
 
+  // Smart/Smart-Pro model gate (2026-08-16): both enhancements are tuned for
+  // the DeepSeek V4 family only (V4 Flash and V4 Pro). The pattern accepts
+  // any V4-family route; the router then selects its Flash/Pro lane itself.
+  const v4ModelPattern = /deepseek[-_/]?v4(?:[-_/]|$)/iu
+  const v4ModelAllowed = (model: string): boolean => v4ModelPattern.test(model)
+
   /** Shift+Tab: advance to the next configured session mode. Cycling starts
    *  from the mode DERIVED from the session log (never a stored index), so
    *  manual `/plan` use can never desync the cycle. */
@@ -1415,13 +1421,23 @@ export function createChannel(
     await applyMode(sessionModes[(index + 1) % sessionModes.length]!)
   }
 
-  const switchEnhancement = async (
+  const performEnhancementSwitch = async (
     kind: 'smart' | 'force-smart',
     enabled: boolean,
   ): Promise<boolean> => {
     const current = kind === 'smart' ? state.smart : state.forceSmart
-    const displayName = kind === 'smart' ? 'Smart' : 'ForceSmart'
+    const displayName = kind === 'smart' ? 'Smart' : 'Smart-Pro'
     const key = kind === 'smart' ? 'smart' : 'force-smart'
+    // Hard model gate (2026-08-16): Smart and Smart-Pro are tuned for the
+    // DeepSeek V4 family (V4 Flash / V4 Pro) only.
+    if (enabled && !v4ModelAllowed(state.model)) {
+      state.notify(t(`${key}-model-required`, { model: state.model }), { color: 'error', timeoutMs: 8000 })
+      return false
+    }
+    if (enabled && state.agentPreset === 'liangshen') {
+      state.notify(t(`${key}-liangshen-conflict`), { color: 'error', timeoutMs: 8000 })
+      return false
+    }
     if (state.working) {
       state.notify(t(`${key}-agent-running`), { color: 'warning' })
       return false
@@ -1460,6 +1476,7 @@ export function createChannel(
       runningPresetOf(agent.session),
       targetSmart,
       targetForceSmart,
+      { resetAnchored: enabled },
     )
     let replacement: AgentHandle
     try {
@@ -1483,8 +1500,8 @@ export function createChannel(
       return false
     }
 
-    const sessionSaved = writeSmartSession(String(childId), targetSmart)
-      && writeForceSmartSession(String(childId), targetForceSmart)
+    const sessionSaved = writeSmartSession(String(childId), composed.smart)
+      && writeForceSmartSession(String(childId), composed.forceSmart)
     try {
       await attachSessionToWorkspace(ctx, replacement.agent.session.header.cwd ?? state.cwd, childId)
     } catch (error) {
@@ -1510,8 +1527,8 @@ export function createChannel(
     state.status = replacement.agent.status
     state.agentId = replacement.agent.id
     state.agentPreset = composed.agentPreset
-    state.smart = targetSmart
-    state.forceSmart = targetForceSmart
+    state.smart = composed.smart
+    state.forceSmart = composed.forceSmart
     state.tps = undefined
     state.tpsSamples = []
     state.lastUsage = undefined
@@ -1534,16 +1551,29 @@ export function createChannel(
     void refreshLoadedContext()
     touchSession(childId)
     state.emit()
-    void oldHandle?.dispose().catch(() => {})
+    await oldHandle?.dispose().catch(() => {})
 
-    const defaultSaved = writeSmartDefault(targetSmart)
-      && writeForceSmartDefault(targetForceSmart)
+    const defaultSaved = writeSmartDefault(composed.smart)
+      && writeForceSmartDefault(composed.forceSmart)
     if (!sessionSaved || !defaultSaved) {
       state.notify(t(`${key}-switched-pref-failed`, { state: enabled ? 'on' : 'off' }), { color: 'warning' })
     } else {
       state.notify(t(`${key}-switched`, { state: enabled ? 'on' : 'off' }), { color: 'success' })
     }
     return true
+  }
+
+  // Serialize mode transitions. Two rapid identical commands become one
+  // real fork plus one idempotent no-op; opposing commands execute in order.
+  let enhancementSwitchTail: Promise<void> = Promise.resolve()
+  const switchEnhancement = (
+    kind: 'smart' | 'force-smart',
+    enabled: boolean,
+  ): Promise<boolean> => {
+    const result = enhancementSwitchTail.then(async () =>
+      await performEnhancementSwitch(kind, enabled))
+    enhancementSwitchTail = result.then(() => undefined, () => undefined)
+    return result
   }
 
   const state: ChannelState = {
@@ -1851,8 +1881,8 @@ export function createChannel(
         state.notify(t('rewind-create-failed'), { color: 'error' })
         return null
       }
-      writeSmartSession(String(childId), state.smart)
-      writeForceSmartSession(String(childId), state.forceSmart)
+      writeSmartSession(String(childId), rewindComposed.smart)
+      writeForceSmartSession(String(childId), rewindComposed.forceSmart)
       try {
         await attachSessionToWorkspace(ctx, handle.agent.session.header.cwd ?? state.cwd, childId)
       } catch (error) {
@@ -1887,6 +1917,8 @@ export function createChannel(
       state.status = handle.agent.status
       state.agentId = handle.agent.id
       state.agentPreset = rewindComposed.agentPreset
+      state.smart = rewindComposed.smart
+      state.forceSmart = rewindComposed.forceSmart
       state.tps = undefined
       state.tpsSamples = []
       state.lastUsage = undefined
@@ -1974,8 +2006,8 @@ export function createChannel(
         state.notify(t('resume-failed', { err: message }), { color: 'error', timeoutMs: 8000 })
         return false
       }
-      writeSmartSession(sessionId, resumedSmart)
-      writeForceSmartSession(sessionId, resumedForceSmart)
+      writeSmartSession(sessionId, resumeComposed.smart)
+      writeForceSmartSession(sessionId, resumeComposed.forceSmart)
       try {
         // `/resume` is an explicit adoption of this persisted conversation.
         // This also repairs sessions created by TUI versions that predate the
@@ -2026,8 +2058,8 @@ export function createChannel(
       state.displayCwd = workspaceService.describe(state.cwd).description ?? state.cwd
       refreshGitBranch()
       state.agentPreset = resumeComposed.agentPreset
-      state.smart = resumedSmart
-      state.forceSmart = resumedForceSmart
+      state.smart = resumeComposed.smart
+      state.forceSmart = resumeComposed.forceSmart
       // Status-line route follows the resumed session (review feedback): the
       // route it actually continues on — a complete cordis.yml pin, else the
       // route its own request/header records carry. A bare log (no turn ever
@@ -2152,8 +2184,8 @@ export function createChannel(
         })
         return false
       }
-      writeSmartSession(String(sessionId), newSmart)
-      writeForceSmartSession(String(sessionId), newForceSmart)
+      writeSmartSession(String(sessionId), newComposed.smart)
+      writeForceSmartSession(String(sessionId), newComposed.forceSmart)
       try {
         await attachSessionToWorkspace(ctx, handle.agent.session.header.cwd ?? state.cwd, sessionId)
       } catch (error) {
@@ -2186,8 +2218,8 @@ export function createChannel(
       state.status = handle.agent.status
       state.agentId = handle.agent.id
       state.agentPreset = newComposed.agentPreset
-      state.smart = newSmart
-      state.forceSmart = newForceSmart
+      state.smart = newComposed.smart
+      state.forceSmart = newComposed.forceSmart
       state.model = route.model
       state.provider = route.provider
       state.tps = undefined
@@ -2308,13 +2340,19 @@ export function createChannel(
       }
       const childId = SessionId(randomUUID())
       let handle: AgentHandle
+      // The model wins, the enhancement follows the model: a fork onto a
+      // route outside an enhancement's gate switches that enhancement off
+      // (with a notice and a persisted preference) instead of mounting it on
+      // a model it was never tuned for.
+      const droppedSmart = state.smart && !v4ModelAllowed(model)
+      const droppedForceSmart = state.forceSmart && !v4ModelAllowed(model)
       // The forked conversation keeps the session's own preset — only the
       // request route changes (same rule as rewindTo).
       const modelComposed = await composePreset(
         ctx,
         runningPresetOf(agent.session),
-        state.smart,
-        state.forceSmart,
+        state.smart && !droppedSmart,
+        state.forceSmart && !droppedForceSmart,
       )
       try {
         handle = await agents.create({
@@ -2336,8 +2374,8 @@ export function createChannel(
         state.notify(t('model-switch-failed', { err: message }), { color: 'error', timeoutMs: 8000 })
         return false
       }
-      writeSmartSession(String(childId), state.smart)
-      writeForceSmartSession(String(childId), state.forceSmart)
+      writeSmartSession(String(childId), modelComposed.smart)
+      writeForceSmartSession(String(childId), modelComposed.forceSmart)
       try {
         await attachSessionToWorkspace(ctx, handle.agent.session.header.cwd ?? state.cwd, childId)
       } catch (error) {
@@ -2372,6 +2410,8 @@ export function createChannel(
       state.agentPreset = modelComposed.agentPreset
       state.model = model
       state.provider = provider
+      state.smart = modelComposed.smart
+      state.forceSmart = modelComposed.forceSmart
       state.tps = undefined
       state.tpsSamples = []
       state.lastUsage = undefined
@@ -2404,6 +2444,20 @@ export function createChannel(
         state.notify(t('model-pref-write-failed'), {
           color: 'warning',
         })
+      }
+      // An auto-dropped enhancement must not resurrect after a restart: the
+      // off state is persisted exactly like an explicit switch.
+      if (droppedSmart && !writeSmartDefault(false)) {
+        state.notify(t('smart-switched-pref-failed', { state: 'off' }), { color: 'warning' })
+      }
+      if (droppedForceSmart && !writeForceSmartDefault(false)) {
+        state.notify(t('force-smart-switched-pref-failed', { state: 'off' }), { color: 'warning' })
+      }
+      if (droppedSmart) {
+        state.notify(t('smart-disabled-by-model', { model }), { color: 'warning', timeoutMs: 8000 })
+      }
+      if (droppedForceSmart) {
+        state.notify(t('force-smart-disabled-by-model', { model }), { color: 'warning', timeoutMs: 8000 })
       }
       return true
     },
@@ -2517,6 +2571,10 @@ export function createChannel(
       // nothing may swap compositions — a started session's logged tool calls
       // would strand under a different tool set. Blank = no turn ever ran.
       const blank = !agent.session.events.some(event => event.type === 'turn/start')
+      if (blank && target.id === 'liangshen' && (state.smart || state.forceSmart)) {
+        state.notify(t('preset-liangshen-enhancement-conflict'), { color: 'error', timeoutMs: 8000 })
+        return false
+      }
       if (!blank) {
         // Persist as the default for future sessions instead of failing.
         if (!writePresetPref(target.id)) {
@@ -2949,7 +3007,7 @@ export function createChannel(
       lines.push(`${t('doctor-session', { id: state.agentId })}${state.sessionTitle ? ' · ' + state.sessionTitle : ''}`)
       const userHome = homeDir()
       const configCandidates = [
-        join(userHome, '.dsh-tui/cordis.yml'),
+        join(DATA_DIR, 'cordis.yml'),
         join(userHome, '.dsh/profiles/dsh-tui/cordis.patch.yml'),
       ]
       for (const candidate of configCandidates) {
@@ -2962,7 +3020,7 @@ export function createChannel(
       for (const dir of sessionsRoots()) {
         lines.push(`${t('doctor-storage', { dir, state: existsSync(dir) ? '✓' : t('doctor-storage-uninit') })}`)
       }
-      if (existsSync(LEGACY_DATA_DIR)) {
+      if (!DATA_DIR_OVERRIDDEN && existsSync(LEGACY_DATA_DIR)) {
         lines.push(t('doctor-legacy-dir'))
       }
       return lines

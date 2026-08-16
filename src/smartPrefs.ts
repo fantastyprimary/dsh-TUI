@@ -10,9 +10,7 @@ import {
   writeEnhancementSession,
 } from './enhancementPrefs.js'
 
-/** Read-only compatibility marker for request headers written before 0.6.2. */
-export const SMART_PROMPT_MARKER = '<!-- dsh-tui-smart:v1 -->'
-const DEFINITION = { file: 'smart.json', legacyPromptMarker: SMART_PROMPT_MARKER } as const
+const DEFINITION = { file: 'smart.json' } as const
 
 export const readSmartDefault = (dir?: string): boolean | undefined =>
   readEnhancementDefault(DEFINITION, dir)

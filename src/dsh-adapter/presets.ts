@@ -16,8 +16,10 @@
  * before presets existed.
  */
 
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
-import type { AgentSetup } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentSetup } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
@@ -43,6 +45,8 @@ export interface AgentPresetsLike {
   resolve(id?: string): Promise<AgentPresetInfo>
   mount(agentCtx: Context, id?: string): Promise<AgentPresetInfo>
   recompose(agentCtx: Context, id: string): Promise<AgentPresetInfo>
+  /** Ensure a target preset is ready before an in-turn Smart-Pro promotion. */
+  standingKeyFor?(id?: string): Promise<object>
   /** Read one service from the agent's own scope chain (preset realms). */
   serviceFor?(agent: { ctx: Context }, key: string): unknown
 }
@@ -59,8 +63,78 @@ export function rosterOf(ctx: Context): AgentPresetsLike | undefined {
 export interface PresetComposition {
   /** Value for the durable header's `meta.agentPreset`; absent without a roster. */
   readonly agentPreset?: string
+  /** Enhancement state after preset compatibility rules are applied. */
+  readonly smart: boolean
+  readonly forceSmart: boolean
   /** Factory setup hook mounting the preset onto the unpublished agent. */
   readonly setup?: AgentSetup
+}
+
+export interface PresetCompositionOptions {
+  /** Ignore inherited completion state for this enhancement's first request. */
+  readonly resetAnchored?: boolean
+}
+
+interface ScopeParentBindingLike {
+  rebind(parent: object): void
+}
+
+interface ScopeRuntimeLike {
+  scopeOf(ctx: Context): object | undefined
+  bindScopeParent(key: object, parent: object): ScopeParentBindingLike
+}
+
+let scopeRuntimePromise: Promise<ScopeRuntimeLike> | undefined
+
+function scopeRuntime(): Promise<ScopeRuntimeLike> {
+  scopeRuntimePromise ??= (async () => {
+    const presetsEntry = createRequire(import.meta.url).resolve('@deepseek-ai/dsh-agent-presets')
+    const scopeEntry = createRequire(presetsEntry).resolve('@deepseek-ai/dsh-scope')
+    const loaded = await import(pathToFileURL(scopeEntry).href) as Partial<ScopeRuntimeLike>
+    if (typeof loaded.scopeOf !== 'function' || typeof loaded.bindScopeParent !== 'function') {
+      throw new Error('dsh-agent-presets scope runtime does not expose scopeOf/bindScopeParent')
+    }
+    return loaded as ScopeRuntimeLike
+  })()
+  return scopeRuntimePromise
+}
+
+async function preparePresetPromotion(agentCtx: Context, parent: object): Promise<() => void> {
+  const scope = await scopeRuntime()
+  const agentKey = scope.scopeOf(agentCtx)
+  if (agentKey === undefined) throw new Error('dsh-tui: refusing to compose an unscoped agent context')
+  let binding: ScopeParentBindingLike | undefined
+  return () => {
+    binding ??= scope.bindScopeParent(agentKey, parent)
+  }
+}
+
+const FORCE_SMART_PERSONA = 'You are a helpful software engineer assistant.'
+const FORCE_SMART_BOOTSTRAP_MAX_TOKENS = 1024
+
+function isForceSmartBootstrapHeader(header: ReturnType<Agent['session']['requestHeader']>): boolean {
+  if (header?.system !== FORCE_SMART_PERSONA || header.config.maxTokens !== FORCE_SMART_BOOTSTRAP_MAX_TOKENS) {
+    return false
+  }
+  const names = header.tools?.map(tool => tool.name) ?? []
+  return names.length === 2 && names.includes('bash') && names.includes('str_replace_editor')
+}
+
+/**
+ * A text-only ForceSmart bootstrap can be the last request before the user
+ * switches modes. Its 1024-token cap is request configuration, so DSH would
+ * otherwise inherit it even after the prompt and tool surface are replaced.
+ */
+function mountForceSmartBootstrapCleanup(agentCtx: Context): void {
+  const owner = agentCtx.agent as Agent
+  agentCtx.on('agent/request', async (payload, next) => {
+    const resolved = await next()
+    if (payload.agent !== owner
+      || resolved.maxTokens !== FORCE_SMART_BOOTSTRAP_MAX_TOKENS
+      || !isForceSmartBootstrapHeader(owner.session.requestHeader())) return resolved
+    const { maxTokens: _bootstrapCap, ...cleaned } = resolved
+    return cleaned
+  }, { prepend: true })
 }
 
 /**
@@ -81,13 +155,25 @@ export async function composePreset(
   requested?: string,
   smart = false,
   forceSmart = false,
+  options: PresetCompositionOptions = {},
 ): Promise<PresetComposition> {
-  if (smart && forceSmart) throw new Error('Smart and ForceSmart are mutually exclusive')
+  if (smart && forceSmart) throw new Error('Smart and Smart-Pro are mutually exclusive')
   const presets = rosterOf(ctx)
   if (presets === undefined) {
-    if (smart) return { setup: agentCtx => mountSmartEnhancement(ctx, agentCtx) }
-    if (forceSmart) return { setup: agentCtx => mountForceSmartEnhancement(ctx, agentCtx) }
-    return {}
+    if (smart) return {
+      smart,
+      forceSmart,
+      setup: async agentCtx => {
+        mountForceSmartBootstrapCleanup(agentCtx)
+        await mountSmartEnhancement(ctx, agentCtx, undefined, options)
+      },
+    }
+    if (forceSmart) return {
+      smart,
+      forceSmart,
+      setup: agentCtx => mountForceSmartEnhancement(ctx, agentCtx, undefined, { ...options, enabled: false }),
+    }
+    return { smart, forceSmart, setup: agentCtx => mountForceSmartBootstrapCleanup(agentCtx) }
   }
   let resolvedId: string
   try {
@@ -97,16 +183,54 @@ export async function composePreset(
       `dsh-tui: agent preset ${requested === undefined ? '(default)' : `"${requested}"`} unavailable ` +
         `(${error instanceof Error ? error.message : String(error)}) — composing the session without a preset`,
     )
-    if (smart) return { setup: agentCtx => mountSmartEnhancement(ctx, agentCtx) }
-    if (forceSmart) return { setup: agentCtx => mountForceSmartEnhancement(ctx, agentCtx) }
-    return {}
+    if (smart) return {
+      smart,
+      forceSmart,
+      setup: async agentCtx => {
+        mountForceSmartBootstrapCleanup(agentCtx)
+        await mountSmartEnhancement(ctx, agentCtx, undefined, options)
+      },
+    }
+    if (forceSmart) return {
+      smart,
+      forceSmart,
+      setup: agentCtx => mountForceSmartEnhancement(ctx, agentCtx, undefined, { ...options, enabled: false }),
+    }
+    return { smart, forceSmart, setup: agentCtx => mountForceSmartBootstrapCleanup(agentCtx) }
+  }
+  // Liangshen is a complete standalone bootstrap/promotion preset. Stacking
+  // either overlay would run two independent promotion state machines and
+  // could leave the visible tool surface in conflicting phases.
+  const compatibleSmart = resolvedId === 'liangshen' ? false : smart
+  const compatibleForceSmart = resolvedId === 'liangshen' ? false : forceSmart
+  if ((smart || forceSmart) && resolvedId === 'liangshen') {
+    ctx.logger.warn('dsh-tui: liangshen is a standalone preset; Smart and Smart-Pro are disabled for this session')
   }
   return {
     agentPreset: resolvedId,
+    smart: compatibleSmart,
+    forceSmart: compatibleForceSmart,
     setup: async (agentCtx: Context) => {
-      await presets.mount(agentCtx, resolvedId)
-      if (smart) await mountSmartEnhancement(ctx, agentCtx, resolvedId)
-      else if (forceSmart) await mountForceSmartEnhancement(ctx, agentCtx, resolvedId)
+      if (compatibleForceSmart) {
+        const standingKeyFor = presets.standingKeyFor
+        if (standingKeyFor === undefined) {
+          ctx.logger.warn('dsh-tui Smart-Pro: agent-presets.standingKeyFor unavailable; using the complete base preset')
+          await presets.mount(agentCtx, resolvedId)
+          await mountForceSmartEnhancement(ctx, agentCtx, resolvedId, { ...options, enabled: false })
+        } else {
+          const parent = await standingKeyFor.call(presets, resolvedId)
+          const promote = await preparePresetPromotion(agentCtx, parent)
+          await mountForceSmartEnhancement(ctx, agentCtx, resolvedId, { ...options, promote })
+        }
+      }
+      else {
+        await presets.mount(agentCtx, resolvedId)
+      }
+      if (compatibleSmart) {
+        mountForceSmartBootstrapCleanup(agentCtx)
+        await mountSmartEnhancement(ctx, agentCtx, resolvedId, options)
+      }
+      else if (!compatibleForceSmart) mountForceSmartBootstrapCleanup(agentCtx)
     },
   }
 }

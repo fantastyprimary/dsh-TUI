@@ -9,9 +9,7 @@ import {
   writeEnhancementSession,
 } from './enhancementPrefs.js'
 
-/** Read-only compatibility marker for request headers written before 0.6.2. */
-export const FORCE_SMART_PROMPT_MARKER = '<!-- dsh-tui-force-smart:v1 -->'
-const DEFINITION = { file: 'force-smart.json', legacyPromptMarker: FORCE_SMART_PROMPT_MARKER } as const
+const DEFINITION = { file: 'force-smart.json' } as const
 
 export const readForceSmartDefault = (dir?: string): boolean | undefined =>
   readEnhancementDefault(DEFINITION, dir)

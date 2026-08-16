@@ -38,9 +38,10 @@ function agentPresetOf(session) {
   return session.header?.agentPreset
 }
 
-function isPromoted(session) {
-  if ((session.header?.seedLength ?? 0) > 0) return true
-  return session.events.some((event) =>
+function isPromoted(session, resetAnchored) {
+  const start = resetAnchored ? (session.header?.seedLength ?? 0) : 0
+  if (!resetAnchored && (session.header?.seedLength ?? 0) > 0) return true
+  return session.events.slice(start).some((event) =>
     event.type === 'tool/call'
     || event.type === 'assistant/message'
     || event.type === 'turn/end')
@@ -86,7 +87,10 @@ function toJsonSchema(spec) {
   return { type: 'object', properties, required, additionalProperties: false }
 }
 
-export function apply(ctx, config) {
+export function apply(ctx, config = {}) {
+  const owner = ctx.agent
+  const owns = agent => owner === undefined || agent === owner
+  const resetAnchored = config.resetAnchored === true
   const overrides = new Map() // session id -> explicit mode (number 0..1)
   const agents = new Map() // session id -> Agent (live handle, in-process only)
   const firstUserText = new Map() // session id -> first REAL user message text (issue #3 fix)
@@ -129,7 +133,7 @@ export function apply(ctx, config) {
   ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
     const assembled = await next()
     const agent = context.agent
-    if (agent === undefined) return assembled
+    if (agent === undefined || !owns(agent)) return assembled
     const session = agent.session
     agents.set(session.id, agent)
 
@@ -144,7 +148,12 @@ export function apply(ctx, config) {
     // Plan and goal drivers depend on their complete native prompt, runtime
     // context, and control/delegation catalog. Anchoring must fail open while
     // either workflow is active or the agent can lose its only exit path.
-    const activePlan = (assembled.sections || []).some((section) => /plan/i.test(section.name))
+    // `plan:policy` is registered permanently by dsh-plan-mode and only its
+    // TEXT is empty outside plan mode — a name-only /plan/i test would fail
+    // open on every session and silently disable the whole router.
+    const activePlan = hasActivePlan(session)
+      || (assembled.sections || []).some((section) =>
+        section.name === 'plan:policy' && typeof section.text === 'string' && section.text.trim().length > 0)
     if (activePlan || (liveGoalActivity.get(session.id) ?? hasActiveGoal(session))) return assembled
 
     // Smart is an overlay over official and user presets. Router Standard's
@@ -187,10 +196,10 @@ export function apply(ctx, config) {
       core = new Set(legacyCore(mode))
     }
 
-    if (isPromoted(session)) {
+    if (isPromoted(session, resetAnchored)) {
       // Anchoring is a true first-request surface. A durable tool call, a
-      // completed/tool-less response, or inherited fork history restores the
-      // base preset's complete sections, contexts, and tool catalog.
+      // completed/tool-less response, or an ordinary inherited fork restores
+      // the base preset. Explicit Smart entry resets only this phase state.
       return assembled
     }
 

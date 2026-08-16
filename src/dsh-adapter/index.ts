@@ -75,7 +75,9 @@ export interface Config {
   preset?: string
   /** Enable Smart routing over the selected Agent preset. */
   smart?: boolean
-  /** Enable the ForceSmart two-phase Anchored enhancement. */
+  /** Enable the Smart-Pro two-phase Anchored enhancement. */
+  smartPro?: boolean
+  /** @deprecated Use `smartPro`. Kept for existing cordis.yml files. */
   forceSmart?: boolean
   /** Shift+Tab session-mode cycle (array order IS the cycle order; index 0
    *  is the unmarked base mode). Each entry bundles any subset of the
@@ -102,6 +104,7 @@ export const Config: Schema<Config> = Schema.object({
   lang: Schema.string().required(false),
   preset: Schema.string().required(false),
   smart: Schema.boolean().required(false),
+  smartPro: Schema.boolean().required(false),
   forceSmart: Schema.boolean().required(false),
   modes: Schema.array(
     Schema.object({

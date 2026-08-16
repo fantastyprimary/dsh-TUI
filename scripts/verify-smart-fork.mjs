@@ -22,9 +22,11 @@ import { join } from 'node:path'
 
 const originalHome = process.env.HOME
 const originalUserProfile = process.env.USERPROFILE
+const originalLang = process.env.DSH_TUI_LANG
 const testHome = mkdtempSync(join(tmpdir(), 'dsh-tui-smart-fork-'))
 process.env.HOME = testHome
 process.env.USERPROFILE = testHome
+process.env.DSH_TUI_LANG = 'zh'
 
 let failed = 0
 
@@ -154,9 +156,13 @@ function makeHostContext(services) {
 
 const CWD = '/work/smart-fork'
 const PROVIDER = 'test-provider'
-const MODEL = 'test-model'
+// A V4-family route: the channel's model gate (2026-08-16) refuses Smart /
+// Smart-Pro switches on anything else, and this suite exercises those
+// switches' fork machinery.
+const MODEL = 'deepseek-v4-flash'
 const START = 1_800_000_000_000
 const STANDARD = { id: 'standard', trust: 'system', name: 'Standard' }
+const LIANGSHEN = { id: 'liangshen', trust: 'system', name: 'Liangshen' }
 
 function startedEvents() {
   return [
@@ -195,7 +201,13 @@ function startedEvents() {
 }
 
 try {
-  const { createChannel } = await import('../lib/types/dsh-adapter/channel.js')
+  const [
+    { createChannel },
+    { composePreset },
+  ] = await Promise.all([
+    import('../lib/types/dsh-adapter/channel.js'),
+    import('../lib/types/dsh-adapter/presets.js'),
+  ])
 
   const services = {}
   const host = makeHostContext(services)
@@ -209,24 +221,26 @@ try {
   services.agentPresets = {
     defaultId: 'standard',
     async list() {
-      return [STANDARD]
+      return [STANDARD, LIANGSHEN]
     },
     async resolve(id = 'standard') {
       resolveCalls.push(id)
-      if (id !== 'standard') throw new Error(`unknown preset: ${id}`)
-      return STANDARD
+      if (id === 'standard') return STANDARD
+      if (id === 'liangshen') return LIANGSHEN
+      throw new Error(`unknown preset: ${id}`)
     },
     async mount(agentCtx, id = 'standard') {
-      if (id !== 'standard') throw new Error(`unknown preset: ${id}`)
+      if (id !== 'standard' && id !== 'liangshen') throw new Error(`unknown preset: ${id}`)
       agentCtx.mountedPreset = id
       mountCalls.push({ agentCtx, id })
       timeline.push(`mount:${id}:${agentCtx.label}`)
-      return STANDARD
+      return id === 'standard' ? STANDARD : LIANGSHEN
     },
     async recompose(agentCtx, id) {
       recomposeCalls.push({ agentCtx, id })
-      if (id !== 'standard') throw new Error(`unknown preset: ${id}`)
-      return STANDARD
+      if (id === 'standard') return STANDARD
+      if (id === 'liangshen') return LIANGSHEN
+      throw new Error(`unknown preset: ${id}`)
     },
   }
 
@@ -263,12 +277,13 @@ try {
     return session
   }
 
-  function makeAgent(session, agentCtx) {
+  function makeAgent(session, agentCtx, options = { provider: PROVIDER, model: MODEL }) {
     return {
       id: session.id,
       status: 'idle',
       session,
       ctx: agentCtx,
+      options,
       followup() {},
       steer() {},
       inbox: { remove: () => false },
@@ -355,7 +370,7 @@ try {
         options.seed ?? [],
         options.meta ?? {},
       )
-      call.handle = makeHandle(makeAgent(session, agentCtx))
+      call.handle = makeHandle(makeAgent(session, agentCtx, options.agentOptions))
       timeline.push(call.resolvedMarker)
       return call.handle
     },
@@ -463,8 +478,8 @@ try {
     JSON.stringify(originalRows),
   )
   check(
-    'fake roster exposes Standard only (Smart is not a preset)',
-    listed.length === 1 && listed[0]?.id === 'standard',
+    'fake roster exposes Standard and standalone Liangshen (Smart is not a preset)',
+    listed.length === 2 && listed[0]?.id === 'standard' && listed[1]?.id === 'liangshen',
     JSON.stringify(listed),
   )
 
@@ -490,6 +505,10 @@ try {
     JSON.stringify(onCreation.agentCtx.pluginCalls.map(call => call.name)),
   )
   check(
+    'Smart on: router receives a one-creation Anchored reset',
+    onCreation.agentCtx.pluginCalls.find(call => call.name === 'router-bootstrap')?.config?.resetAnchored === true,
+  )
+  check(
     'Smart on: host runtime is initialized once',
     same(host.hostPluginCalls.map(call => call.name), ['dsh-tui-smart-runtime']),
     JSON.stringify(host.hostPluginCalls.map(call => call.name)),
@@ -499,6 +518,12 @@ try {
     'Smart on: sidecar saves the new child and default as enabled',
     onSidecar.enabled === true && onSidecar.sessions?.[onCreation.options.sessionId]?.enabled === true,
     JSON.stringify(onSidecar),
+  )
+  check(
+    'Smart on: a V4-family model switches cleanly with no scope warning',
+    channel.notifications.some(notification => notification.text.includes('已切换为 on'))
+      && !channel.notifications.some(notification => notification.text.includes(MODEL)),
+    JSON.stringify(channel.notifications.map(notification => notification.text)),
   )
   const onHandle = onCreation.handle
   const onSession = onHandle.agent.session
@@ -517,16 +542,25 @@ try {
   check('ForceSmart on: switchForceSmart(true) returns true', forceResult === true)
   assertForkRequest('ForceSmart on', 1, onSession)
   assertSuccessfulSwap('ForceSmart on', 1, onHandle, originalRows, false, true)
+  const forceBootstrapCall = forceCreation.agentCtx.pluginCalls.find(
+    call => call.name === 'dsh-tui-force-smart-bootstrap',
+  )
   check(
-    'ForceSmart on: setup mounts exactly one ForceSmart overlay after Standard',
+    'ForceSmart on: a legacy roster fails open to Standard without registering duplicate tools',
     same(forceCreation.agentCtx.pluginCalls.map(call => call.name), [
-      ...(process.platform === 'win32'
-        ? ['dsh-tui-force-smart-windows-bash']
-        : ['TerminalSessionService', 'terminal-bash', 'tool-bash-persistent']),
-      'tool-str-replace-editor',
       'dsh-tui-force-smart-bootstrap',
-    ]),
+    ]) && forceBootstrapCall?.config?.enabled === false,
     JSON.stringify(forceCreation.agentCtx.pluginCalls.map(call => call.name)),
+  )
+  check(
+    'ForceSmart on: the legacy-roster fallback is explicit',
+    host.warnings.some(message =>
+      message.includes('standingKeyFor unavailable') && message.includes('complete base preset')),
+    JSON.stringify(host.warnings),
+  )
+  check(
+    'ForceSmart on: bootstrap receives a one-creation Anchored reset',
+    forceBootstrapCall?.config?.resetAnchored === true,
   )
   check(
     'ForceSmart on: both child sidecars record the mutually exclusive state',
@@ -534,6 +568,12 @@ try {
       forceSidecar().sessions?.[forceCreation.options.sessionId]?.enabled === true &&
       sidecar().enabled === false &&
       forceSidecar().enabled === true,
+  )
+  check(
+    'ForceSmart on: a V4-family model switches cleanly with no scope warning',
+    channel.notifications.some(notification => notification.text.includes('已切换为 on'))
+      && !channel.notifications.some(notification => notification.text.includes(MODEL)),
+    JSON.stringify(channel.notifications.map(notification => notification.text)),
   )
   const forceHandle = forceCreation.handle
   const forceSession = forceHandle.agent.session
@@ -678,11 +718,90 @@ try {
       recomposeCalls.length === 0,
     JSON.stringify({ resolveCalls, mounts: mountCalls.map(call => call.id), recomposes: recomposeCalls.length }),
   )
+
+  const smartLiangshen = await composePreset(host.ctx, 'liangshen', true, false)
+  const smartLiangshenCtx = makeScopedContext('liangshen-smart-normalized')
+  await smartLiangshen.setup?.(smartLiangshenCtx)
+  check(
+    'Liangshen composition normalizes Smart off and mounts no overlay',
+    smartLiangshen.agentPreset === 'liangshen' &&
+      smartLiangshen.smart === false &&
+      smartLiangshen.forceSmart === false &&
+      smartLiangshenCtx.mountedPreset === 'liangshen' &&
+      smartLiangshenCtx.pluginCalls.length === 0,
+    JSON.stringify(smartLiangshenCtx.pluginCalls.map(call => call.name)),
+  )
+  const forceLiangshen = await composePreset(host.ctx, 'liangshen', false, true)
+  const forceLiangshenCtx = makeScopedContext('liangshen-smart-pro-normalized')
+  await forceLiangshen.setup?.(forceLiangshenCtx)
+  check(
+    'Liangshen composition normalizes Smart-Pro off and mounts no overlay',
+    forceLiangshen.agentPreset === 'liangshen' &&
+      forceLiangshen.smart === false &&
+      forceLiangshen.forceSmart === false &&
+      forceLiangshenCtx.mountedPreset === 'liangshen' &&
+      forceLiangshenCtx.pluginCalls.length === 0,
+    JSON.stringify(forceLiangshenCtx.pluginCalls.map(call => call.name)),
+  )
+
+  const conflictForkCount = forkCalls.length
+  const conflictCreateCount = createCalls.length
+  const liangshenSession = makeSession('session-liangshen', 'liangshen', startedEvents(), { cwd: CWD })
+  const liangshenChannel = createChannel(
+    host.ctx,
+    makeAgent(liangshenSession, makeScopedContext('liangshen-live')),
+    {
+      model: MODEL,
+      cwd: CWD,
+      provider: PROVIDER,
+      activity: false,
+      agentPreset: 'liangshen',
+      smart: false,
+      forceSmart: false,
+    },
+  )
+  const liangshenSmart = await liangshenChannel.switchSmart(true)
+  const liangshenSmartPro = await liangshenChannel.switchForceSmart(true)
+  check(
+    'Liangshen rejects Smart and Smart-Pro before any fork or create',
+    liangshenSmart === false && liangshenSmartPro === false &&
+      forkCalls.length === conflictForkCount && createCalls.length === conflictCreateCount &&
+      liangshenChannel.notifications.some(item => item.text.includes('不能叠加 Smart')) &&
+      liangshenChannel.notifications.some(item => item.text.includes('不能叠加 Smart-Pro')),
+    JSON.stringify(liangshenChannel.notifications.map(item => item.text)),
+  )
+
+  const recomposeCount = recomposeCalls.length
+  const blankSmartSession = makeSession('session-blank-smart', 'standard', [], { cwd: CWD })
+  const blankSmartChannel = createChannel(
+    host.ctx,
+    makeAgent(blankSmartSession, makeScopedContext('blank-smart-live')),
+    {
+      model: MODEL,
+      cwd: CWD,
+      provider: PROVIDER,
+      activity: false,
+      agentPreset: 'standard',
+      smart: true,
+      forceSmart: false,
+    },
+  )
+  const liangshenPresetSwitch = await blankSmartChannel.switchPreset('liangshen')
+  check(
+    'A blank enhanced session rejects /preset liangshen before recompose',
+    liangshenPresetSwitch === false &&
+      blankSmartChannel.agentPreset === 'standard' &&
+      recomposeCalls.length === recomposeCount &&
+      blankSmartChannel.notifications.some(item => item.text.includes('独立 preset')),
+    JSON.stringify(blankSmartChannel.notifications.map(item => item.text)),
+  )
 } finally {
   if (originalHome === undefined) delete process.env.HOME
   else process.env.HOME = originalHome
   if (originalUserProfile === undefined) delete process.env.USERPROFILE
   else process.env.USERPROFILE = originalUserProfile
+  if (originalLang === undefined) delete process.env.DSH_TUI_LANG
+  else process.env.DSH_TUI_LANG = originalLang
   rmSync(testHome, { recursive: true, force: true })
 }
 

@@ -34,6 +34,7 @@ const isolatedEnvironment = [
   'USERPROFILE',
   'DSH_HOME',
   'DSH_SMART_RUNTIME_PATH',
+  'DSH_TUI_SMART_PRO_BASH_PATH',
   'DSH_TUI_FORCE_SMART_BASH_PATH',
 ]
 const originalEnvironment = new Map(isolatedEnvironment.map(name => [name, process.env[name]]))
@@ -41,6 +42,7 @@ process.env.HOME = testHome
 process.env.USERPROFILE = testHome
 process.env.DSH_HOME = join(testHome, '.dsh')
 delete process.env.DSH_SMART_RUNTIME_PATH
+delete process.env.DSH_TUI_SMART_PRO_BASH_PATH
 delete process.env.DSH_TUI_FORCE_SMART_BASH_PATH
 
 let failed = 0
@@ -130,9 +132,7 @@ function headerEvents(capture) {
 }
 
 function hasEnhancementMetadata(system = '') {
-  return system.includes('<!-- dsh-tui-smart:v1 -->')
-    || system.includes('<!-- dsh-tui-force-smart:v1 -->')
-    || system.includes('Smart task routing is active')
+  return system.includes('Smart task routing is active')
     || system.includes('ForceSmart two-phase anchoring is active')
 }
 
@@ -214,6 +214,7 @@ try {
     { default: SessionStore, SessionId },
     { default: SystemPrompt },
     { default: ToolRuntime, defineContentToolFixture },
+    { createScope, bindScopeParent, scopeOf },
     { default: AgentRegistry },
     { default: AgentLoop },
     { createChannel },
@@ -225,6 +226,7 @@ try {
     import('@deepseek-ai/dsh-session'),
     import('@deepseek-ai/dsh-system-prompt'),
     import('@deepseek-ai/dsh-tools'),
+    import('@deepseek-ai/dsh-scope'),
     import('@deepseek-ai/dsh-agent'),
     import(agentLoopEntry),
     import('../lib/types/dsh-adapter/channel.js'),
@@ -253,6 +255,12 @@ try {
     textResponse('Smart response.'),
     textResponse('Standard response after Smart.'),
     textResponse('Smart response after re-enable.'),
+    textResponse('ForceSmart response after Smart.'),
+    textResponse('Smart response after ForceSmart.'),
+    textResponse('Standard response after Smart-to-ForceSmart round trip.'),
+    toolCallResponse(CallId('force-smart-runtime-bash'), 'bash', { command: "printf 'force-smart-bash-ok\\n'" }),
+    textResponse('ForceSmart tool follow-up response.'),
+    textResponse('Standard response after ForceSmart.'),
   ]
 
   class CapturingAdapter extends LlmAdapter {
@@ -301,6 +309,10 @@ try {
   const CODE = { id: 'code', trust: 'system', name: 'Code' }
   const DEFAULT_SENTINEL = { id: 'default-sentinel', trust: 'system', name: 'Default sentinel' }
   const PLATFORM_SHELL = process.platform === 'win32' ? 'pwsh' : 'bash'
+  // The ForceSmart bootstrap always exposes the Minimal `bash` interface: the
+  // persistent PTY backend on posix, the Git Bash adapter on win32. DeepSeek
+  // V4 was trained against that schema, never against a `pwsh` surface.
+  const FORCE_SMART_SHELL = 'bash'
   const WORKFLOW_TOOL_NAMES = ['exit_plan_mode', 'goal', 'subagent', 'workflow']
   const BASE_TOOL_NAMES = [
     'read', 'write', 'edit', 'glob', 'grep', PLATFORM_SHELL, 'probe', ...WORKFLOW_TOOL_NAMES,
@@ -325,6 +337,41 @@ try {
   const mountCalls = []
   const resolveCalls = []
   const recomposeCalls = []
+  const standing = new Map()
+
+  function standingPreset(id) {
+    const existing = standing.get(id)
+    if (existing !== undefined) return existing
+    const key = { preset: id }
+    const scope = createScope(rootContext, key)
+    const scopedPrompt = scope.ctx.get('systemPrompt')
+    const scopedTools = scope.ctx.get('tools')
+    if (scopedPrompt === undefined || scopedTools === undefined) {
+      throw new Error('fixture standing scope is missing prompt/tool services')
+    }
+    scopedPrompt.context({
+      name: 'runtime-policy-sentinel',
+      order: 0,
+      text: 'Runtime policy sentinel: workspace-write and approval ask.',
+    })
+    scopedPrompt.section({
+      name: 'deployment:persona',
+      order: 0,
+      text: id === 'code'
+        ? 'Code request-integration persona.'
+        : id === 'standard'
+          ? 'Standard request-integration persona.'
+          : 'Sentinel preset must never be mounted by a Smart replacement.',
+    })
+    if (id === 'standard') {
+      for (const name of BASE_TOOL_NAMES) scopedTools.register(fixtureTool(name))
+    } else {
+      scopedTools.register(fixtureTool(id === 'code' ? 'code_only' : 'sentinel_tool'))
+    }
+    standing.set(id, key)
+    return key
+  }
+
   rootContext.provide('agentPresets', {
     // A non-Standard default makes an accidental undefined preset observable.
     defaultId: 'default-sentinel',
@@ -340,33 +387,17 @@ try {
     },
     async mount(agentContext, id = 'default-sentinel') {
       mountCalls.push({ agentContext, id })
-      agentContext.systemPrompt.context({
-        name: 'runtime-policy-sentinel',
-        order: 0,
-        text: 'Runtime policy sentinel: workspace-write and approval ask.',
-      })
-      if (id !== 'standard') {
-        agentContext.systemPrompt.section({
-          name: 'deployment:persona',
-          order: 0,
-          text: id === 'code'
-            ? 'Code request-integration persona.'
-            : 'Sentinel preset must never be mounted by a Smart replacement.',
-        })
-        agentContext.tools.register(fixtureTool(id === 'code' ? 'code_only' : 'sentinel_tool'))
-        return id === 'code' ? CODE : DEFAULT_SENTINEL
-      }
-      agentContext.systemPrompt.section({
-        name: 'deployment:persona',
-        order: 0,
-        text: 'Standard request-integration persona.',
-      })
-      for (const name of BASE_TOOL_NAMES) agentContext.tools.register(fixtureTool(name))
-      return STANDARD
+      const agentKey = scopeOf(agentContext)
+      if (agentKey === undefined) throw new Error('fixture agent context is unscoped')
+      bindScopeParent(agentKey, standingPreset(id))
+      return id === 'standard' ? STANDARD : id === 'code' ? CODE : DEFAULT_SENTINEL
     },
     async recompose(agentContext, id) {
       recomposeCalls.push({ agentContext, id })
       throw new Error('Smart request transitions must fork, not recompose')
+    },
+    async standingKeyFor(id = 'default-sentinel') {
+      return standingPreset(id)
     },
   })
 
@@ -425,19 +456,21 @@ try {
   check('Fresh Standard + ForceSmart: no enhancement metadata enters the prompt',
     !hasEnhancementMetadata(freshForce.request.system))
   check('Fresh Standard + ForceSmart: compatible shell/editor bootstrap surface',
-    same(toolNames(freshForce), [PLATFORM_SHELL, 'str_replace_editor']),
+    same(toolNames(freshForce), [FORCE_SMART_SHELL, 'str_replace_editor']),
     toolNames(freshForce).join(', '))
   const forceBash = freshForce.request.tools.find(tool => tool.name === 'bash')
   const forceEditor = freshForce.request.tools.find(tool => tool.name === 'str_replace_editor')
   check('Fresh Standard + ForceSmart: bash prompt and schema match Minimal',
     forceBash?.description?.startsWith('Run commands in a bash shell\n')
-      && forceBash?.parameters?.command?.required === true
-      && forceBash?.parameters?.command?.description
+      && forceBash?.parameters?.type === 'object'
+      && same(forceBash?.parameters?.required, ['command'])
+      && forceBash?.parameters?.properties?.command?.description
         === 'The bash command to run. Relative path is preferred in the command.')
   check('Fresh Standard + ForceSmart: editor prompt and schema match Minimal',
     forceEditor?.description?.startsWith('Custom editing tool for viewing, creating and editing files\n')
-      && same(forceEditor?.parameters?.command?.enum, ['view', 'create', 'str_replace', 'insert'])
-      && forceEditor?.parameters?.path?.required === true)
+      && forceEditor?.parameters?.type === 'object'
+      && same(forceEditor?.parameters?.properties?.command?.enum, ['view', 'create', 'str_replace', 'insert'])
+      && same(forceEditor?.parameters?.required, ['command', 'path']))
   check('Fresh Standard + ForceSmart: bootstrap request uses the Pro-tuned 1024 budget',
     freshForce.request.maxTokens === 1024,
     String(freshForce.request.maxTokens))
@@ -458,12 +491,13 @@ try {
     JSON.stringify(promotedForce.request.messages).includes('Runtime policy sentinel'))
   check('Promoted Standard + ForceSmart: goal, subagent, and workflow tools are restored',
     WORKFLOW_TOOL_NAMES.every(name => toolNames(promotedForce).includes(name))
-      && !toolNames(promotedForce).includes('str_replace_editor'),
+      && toolNames(promotedForce).includes('str_replace_editor'),
     toolNames(promotedForce).join(', '))
   await freshForceHandle.dispose()
 
   function addWorkflowSurface(handle, label, plan = false) {
     if (plan) {
+      handle.agent.session.append('plan/mode', { active: true })
       handle.agent.ctx.systemPrompt.section({
         name: 'plan:policy',
         order: -50,
@@ -498,7 +532,7 @@ try {
     forcePlan.request.maxTokens === undefined
       && JSON.stringify(forcePlan.request.messages).includes('ForceSmart active plan workflow context sentinel.')
       && WORKFLOW_TOOL_NAMES.every(name => toolNames(forcePlan).includes(name))
-      && !toolNames(forcePlan).includes('str_replace_editor'),
+      && toolNames(forcePlan).includes('str_replace_editor'),
     toolNames(forcePlan).join(', '))
   await forcePlanHandle.dispose()
 
@@ -543,7 +577,7 @@ try {
     forceGoal.request.maxTokens === undefined
       && JSON.stringify(forceGoal.request.messages).includes('ForceSmart active goal workflow context sentinel.')
       && WORKFLOW_TOOL_NAMES.every(name => toolNames(forceGoal).includes(name))
-      && !toolNames(forceGoal).includes('str_replace_editor'),
+      && toolNames(forceGoal).includes('str_replace_editor'),
     toolNames(forceGoal).join(', '))
 
   const forceChildHandle = await inheritedChild(
@@ -788,16 +822,21 @@ try {
         ? {}
         : { agentPreset: initialComposition.agentPreset }),
     },
-    agentOptions: { provider: 'request-test', model: 'request-model' },
+    // The channel's model gate (2026-08-16) only enables Smart/Smart-Pro on
+    // V4 routes, so the switch flow under test runs on a V4 Pro route.
+    agentOptions: { provider: 'request-test', model: 'deepseek-v4-pro' },
     ...(initialComposition.setup === undefined ? {} : { setup: initialComposition.setup }),
   })
 
   // Prime one real durable tool/call so Router Standard is in its promoted
   // catalog state. The three captures under test then remain one model request
   // each while still proving the Router management tools are assembled.
+  // The wording is a spec-classifier hit ("debug"): on the V4 Pro route the
+  // router's pro lane must quantize this to the spec band, whose surface is
+  // the single RL persona + editor — the same shape Router Standard serves.
   adapter.stage = 'bootstrap'
   initialHandle.agent.followup(createUserMessage({
-    content: [{ type: 'text', text: 'Create the bootstrap fixture.' }],
+    content: [{ type: 'text', text: 'Debug the failing bootstrap fixture.' }],
     source: { kind: 'user' },
   }))
   await initialHandle.agent.whenIdle()
@@ -810,7 +849,7 @@ try {
   rootContext.tools.register(fixtureTool('epoch_probe'))
 
   const channel = createChannel(rootContext, initialHandle.agent, {
-    model: 'request-model',
+    model: 'deepseek-v4-pro',
     provider: 'request-test',
     cwd: workspace,
     agentPreset: 'standard',
@@ -820,7 +859,7 @@ try {
     handle: initialHandle,
   })
 
-  async function captureTurn(stage, text) {
+  async function captureRequests(stage, text, expectedRequests) {
     const before = adapter.captures.length
     adapter.stage = stage
     const live = rootContext.agents.get(SessionId(channel.agentId))
@@ -834,16 +873,27 @@ try {
     disposeStatus()
     await live.whenIdle()
     const captures = adapter.captures.slice(before).filter(capture => capture.stage === stage)
-    if (captures.length !== 1) {
+    if (captures.length !== expectedRequests) {
       const tail = live.session.events.slice(-8).map(event =>
         `${event.seq}:${event.type}${event.type === 'turn/end' ? `:${JSON.stringify(event.data.reason)}` : ''}`)
       throw new Error(
-        `${stage}: expected one model request, captured ${captures.length}; `
+        `${stage}: expected ${expectedRequests} model request(s), captured ${captures.length}; `
           + `capture stages=[${adapter.captures.slice(before).map(capture => capture.stage).join(', ')}]; `
           + `event tail=[${tail.join(', ')}]`,
       )
     }
-    return captures[0]
+    return captures
+  }
+
+  async function captureTurn(stage, text) {
+    return (await captureRequests(stage, text, 1))[0]
+  }
+
+  function currentLineage(label) {
+    const id = channel.agentId
+    const live = rootContext.agents.get(SessionId(id))
+    if (live === undefined) throw new Error(`${label}: channel agent is not live`)
+    return { id, events: structuredClone(live.session.events) }
   }
 
   const standard = await captureTurn('standard-off-before', 'Continue in Standard without Smart.')
@@ -872,24 +922,25 @@ try {
   check('Smart on: enhancement state changes without changing agentPreset',
     channel.smart === true && channel.agentPreset === 'standard')
 
-  const smart = await captureTurn('smart-on', 'Continue with the Smart enhancement.')
+  // Spec-classifier wording ("fix"/"broken"): on the V4 Pro route the router's
+  // pro lane serves the spec band's single RL persona, so the Anchored
+  // restart assertion below keeps its Router-Standard meaning.
+  const smart = await captureTurn('smart-on', 'Fix the broken login flow with the Smart enhancement.')
   assertFullHeader('Smart on', smart)
   assertForkSeed('Smart on', smart, standardParentId, standardParentEvents)
   const smartTools = toolNames(smart)
-  check('Smart on: promoted system prompt stays native and metadata-free',
-    smart.request.system === standard.request.system
-      && !hasEnhancementMetadata(smart.request.system))
-  check('Smart on: Router management tools are present after durable promotion',
-    ROUTER_TOOL_NAMES.every(name => smartTools.includes(name)), smartTools.join(', '))
-  check('Smart on: base Standard catalog remains available',
-    [...BASE_TOOL_NAMES, 'epoch_probe'].every(name => smartTools.includes(name)))
-  check('Smart on: Router v0.2 Standard interface adds str_replace_editor',
-    smartTools.includes('str_replace_editor'))
-  check('Smart on: inherited tool-call history starts promoted and restores runtime policy context',
+  check('Smart on: explicit entry restarts the metadata-free Anchored persona',
+    smart.request.system === 'You are a helpful software engineer assistant.'
+      && !hasEnhancementMetadata(smart.request.system),
+    JSON.stringify(smart.request.system.slice(0, 120)))
+  check('Smart on: explicit entry uses the exact shell/editor bootstrap surface',
+    same(smartTools, [PLATFORM_SHELL, 'str_replace_editor']), smartTools.join(', '))
+  check('Smart on: inherited conversation remains available without promoting the new phase',
     JSON.stringify(smart.request.messages).includes('Runtime policy sentinel'))
-  check('Smart on: optional host management surface and status tool are visible',
-    SUPER_INJECTOR_TOOL_NAMES.every(name => smartTools.includes(name))
-      && smartTools.includes('dev_smart_status'))
+  check('Smart on: full Router and optional-host management surfaces stay deferred',
+    ROUTER_TOOL_NAMES.every(name => !smartTools.includes(name))
+      && SUPER_INJECTOR_TOOL_NAMES.every(name => !smartTools.includes(name))
+      && !smartTools.includes('dev_smart_status'))
   check('Smart on: Standard request messages are an exact seed prefix',
     smart.request.messages.length > standard.request.messages.length
       && same(smart.request.messages.slice(0, standard.request.messages.length), standard.request.messages))
@@ -935,11 +986,11 @@ try {
   check('Smart re-enable: state changes without changing agentPreset',
     channel.smart === true && channel.agentPreset === 'standard')
 
-  const smartAgain = await captureTurn('smart-on-again', 'Continue after re-enabling Smart.')
+  const smartAgain = await captureTurn('smart-on-again', 'Repair the broken flow after re-enabling Smart.')
   assertFullHeader('Smart after re-enable', smartAgain)
   assertForkSeed('Smart re-enable', smartAgain, standardAgainParentId, standardAgainParentEvents)
   const smartAgainTools = toolNames(smartAgain)
-  check('Smart re-enable: metadata-free prompt and complete Smart surface are restored exactly',
+  check('Smart re-enable: metadata-free prompt and Smart bootstrap surface restart exactly',
     smartAgain.request.system === smart.request.system
       && !hasEnhancementMetadata(smartAgain.request.system)
       && same(smartAgainTools, smartTools))
@@ -950,22 +1001,133 @@ try {
         standardAgain.request.messages,
       ))
 
-  check('all four requests keep the same provider/model route',
-    [standard, smart, standardAgain, smartAgain].every(capture =>
-      capture.request.provider === 'request-test' && capture.request.model === 'request-model'))
+  const smartToForceParent = currentLineage('Smart to ForceSmart')
+  check('Smart -> ForceSmart: one replacement succeeds', await channel.switchForceSmart(true))
+  check('Smart -> ForceSmart: state is mutually exclusive',
+    channel.smart === false && channel.forceSmart === true)
+  const forceFromSmart = await captureTurn(
+    'force-smart-from-smart',
+    'Continue after switching from Smart to ForceSmart.',
+  )
+  assertFullHeader('ForceSmart after Smart', forceFromSmart)
+  assertForkSeed('Smart -> ForceSmart', forceFromSmart, smartToForceParent.id, smartToForceParent.events)
+  check('Smart -> ForceSmart: explicit entry restarts the Minimal prompt, tools, and cap',
+    forceFromSmart.request.system === 'You are a helpful software engineer assistant.'
+      && forceFromSmart.request.maxTokens === 1024
+      && same(toolNames(forceFromSmart), [FORCE_SMART_SHELL, 'str_replace_editor']))
+
+  const forceToSmartParent = currentLineage('ForceSmart to Smart')
+  check('ForceSmart -> Smart: one replacement succeeds', await channel.switchSmart(true))
+  check('ForceSmart -> Smart: state is mutually exclusive',
+    channel.smart === true && channel.forceSmart === false)
+  const smartFromForce = await captureTurn(
+    'smart-from-force-smart',
+    'Debug the broken integration after switching from ForceSmart to Smart.',
+  )
+  assertFullHeader('Smart after ForceSmart', smartFromForce)
+  assertForkSeed('ForceSmart -> Smart', smartFromForce, forceToSmartParent.id, forceToSmartParent.events)
+  check('ForceSmart -> Smart: ForceSmart prompt, cap, and tool filter do not leak',
+    smartFromForce.request.system === smart.request.system
+      && smartFromForce.request.maxTokens === undefined
+      && same(toolNames(smartFromForce), smartTools))
+
+  const smartRoundTripParent = currentLineage('Smart round trip to Standard')
+  check('Smart -> Standard: explicit off succeeds', await channel.switchSmart(false))
+  const standardAfterRoundTrip = await captureTurn(
+    'standard-after-enhancement-round-trip',
+    'Continue in Standard after the enhancement round trip.',
+  )
+  assertFullHeader('Standard after Smart/ForceSmart round trip', standardAfterRoundTrip)
+  assertForkSeed(
+    'Smart -> Standard after round trip',
+    standardAfterRoundTrip,
+    smartRoundTripParent.id,
+    smartRoundTripParent.events,
+  )
+  check('Smart -> Standard after round trip: native prompt and tools restore exactly',
+    standardAfterRoundTrip.request.system === standard.request.system
+      && standardAfterRoundTrip.request.maxTokens === undefined
+      && same(toolNames(standardAfterRoundTrip), standardTools))
+
+  const standardToForceParent = currentLineage('Standard to ForceSmart')
+  check('Standard -> ForceSmart: one replacement succeeds', await channel.switchForceSmart(true))
+  const [forceFromStandard, forceFromStandardFollowup] = await captureRequests(
+    'force-smart-from-standard',
+    'Continue after enabling ForceSmart from Standard.',
+    2,
+  )
+  assertFullHeader('ForceSmart after Standard', forceFromStandard)
+  assertForkSeed('Standard -> ForceSmart', forceFromStandard, standardToForceParent.id, standardToForceParent.events)
+  check('Standard -> ForceSmart: explicit entry restarts the Minimal prompt, tools, and cap',
+    forceFromStandard.request.system === 'You are a helpful software engineer assistant.'
+      && forceFromStandard.request.maxTokens === 1024
+      && same(toolNames(forceFromStandard), [FORCE_SMART_SHELL, 'str_replace_editor']))
+  check('Standard -> ForceSmart: the replacement executes a real tool call and reaches its follow-up request',
+    JSON.stringify(forceFromStandardFollowup.request.messages).includes('force-smart-bash-ok'))
+
+  const forceToStandardParent = currentLineage('ForceSmart to Standard')
+  check('ForceSmart -> Standard: explicit off succeeds', await channel.switchForceSmart(false))
+  const standardFromForce = await captureTurn(
+    'standard-from-force-smart',
+    'Continue after disabling ForceSmart.',
+  )
+  assertFullHeader('Standard after ForceSmart', standardFromForce)
+  assertForkSeed('ForceSmart -> Standard', standardFromForce, forceToStandardParent.id, forceToStandardParent.events)
+  check('ForceSmart -> Standard: native prompt, budget, and tools restore exactly',
+    standardFromForce.request.system === standard.request.system
+      && standardFromForce.request.maxTokens === undefined
+      && same(toolNames(standardFromForce), standardTools))
+
+  const idempotentAgent = channel.agentId
+  const idempotentResolveCount = resolveCalls.length
+  check('Standard idempotence: repeated off commands succeed without another fork',
+    await channel.switchSmart(false)
+      && await channel.switchForceSmart(false)
+      && channel.agentId === idempotentAgent
+      && resolveCalls.length === idempotentResolveCount)
+
+  check('all transition requests keep the same provider/model route',
+    [
+      standard,
+      smart,
+      standardAgain,
+      smartAgain,
+      forceFromSmart,
+      smartFromForce,
+      standardAfterRoundTrip,
+      forceFromStandard,
+      standardFromForce,
+    ].every(capture =>
+      capture.request.provider === 'request-test' && capture.request.model === 'deepseek-v4-pro'))
   check('Smart transitions never use preset recompose', recomposeCalls.length === 0)
   check('every composition resolves the source preset explicitly',
-    resolveCalls.length === 14
-      && resolveCalls.filter(id => id === 'standard').length === 13
+    resolveCalls.length === 19
+      && resolveCalls.filter(id => id === 'standard').length === 18
       && resolveCalls.filter(id => id === 'code').length === 1,
     resolveCalls.join(', '))
-  check('base Standard mount runs once per agent and never falls back to the roster default',
+  check('non-ForceSmart agents mount once and never fall back to the roster default',
     mountCalls.length === 14
       && mountCalls.filter(call => call.id === 'standard').length === 13
       && mountCalls.filter(call => call.id === 'code').length === 1,
     mountCalls.map(call => call.id).join(', '))
   check('Smart preference writes are isolated under the temporary HOME',
     existsSync(join(testHome, '.dsh-tui', 'smart.json')))
+  // Model gates (2026-08-16): both enhancements accept the DeepSeek V4 family
+  // (V4 Flash / V4 Pro), and a model fork off a gated route drops them
+  // instead of mounting them on an untuned model.
+  check('model gate: Smart and Smart-Pro run on V4 Flash',
+    await channel.switchModel('request-test', 'deepseek-v4-flash')
+      && await channel.switchSmart(true)
+      && await channel.switchForceSmart(true)
+      && channel.smart === false // mutual exclusion: enabling one disables the other
+      && channel.forceSmart === true)
+  check('model gate: a non-V4 route auto-disables both enhancements',
+    await channel.switchModel('request-test', 'request-model')
+      && channel.smart === false
+      && channel.forceSmart === false)
+  check('model gate: Smart and Smart-Pro are refused on a non-V4 model',
+    (await channel.switchSmart(true)) === false
+      && (await channel.switchForceSmart(true)) === false)
   check('adapter consumed the exact scripted request count', responses.length === 0)
 } catch (error) {
   failed += 1

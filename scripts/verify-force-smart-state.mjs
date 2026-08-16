@@ -37,7 +37,6 @@ try {
 }
 
 const {
-  FORCE_SMART_PROMPT_MARKER,
   forceSmartModeOf,
   readForceSmartDefault,
   readForceSmartSession,
@@ -45,21 +44,18 @@ const {
   writeForceSmartDefault,
   writeForceSmartSession,
 } = forceSmartPrefs
-const { SMART_PROMPT_MARKER, smartModeOf } = smartPrefs
+const { smartModeOf } = smartPrefs
 const { resolveEnhancementSelection } = enhancementPrefs
 
 const prefsDir = join(testHome, '.dsh-tui')
 const prefsFile = join(prefsDir, 'force-smart.json')
 
-function requestHeader(seq, { forceSmart = false, smart = false } = {}) {
-  const system = ['base system']
-  if (smart) system.push(SMART_PROMPT_MARKER)
-  if (forceSmart) system.push(FORCE_SMART_PROMPT_MARKER)
+function requestHeader(seq, system = 'base system') {
   return {
     type: 'request/header',
     seq,
     time: seq,
-    data: { header: { system: system.join('\n') } },
+    data: { header: { system } },
   }
 }
 
@@ -86,30 +82,30 @@ test('ForceSmart default and per-session state persist in force-smart.json', () 
   assert.equal(readForceSmartSession('alpha'), false)
 })
 
-test('a fork child uses its ForceSmart sidecar even when legacy headers disagree', () => {
-  const inherited = requestHeader(3, { forceSmart: true })
+test('a fork child uses only its ForceSmart sidecar even when prompts disagree', () => {
+  const inherited = requestHeader(3, 'ForceSmart two-phase anchoring is active')
   const child = session('child-before-request', 4, [inherited])
 
   assert.equal(forceSmartModeOf(child, false), false)
   assert.equal(forceSmartModeOf(child, true), true)
 })
 
-test('the ForceSmart sidecar overrides child-local and inherited legacy headers', async () => {
+test('the ForceSmart sidecar overrides child-local and inherited prompt text', async () => {
   const localOff = session('child-local-off', 4, [
-    requestHeader(3, { forceSmart: true }),
+    requestHeader(3, 'ForceSmart two-phase anchoring is active'),
     requestHeader(4),
   ])
   assert.equal(forceSmartModeOf(localOff, true), true)
 
   const localOn = session('child-local-on', 4, [
     requestHeader(3),
-    requestHeader(4, { forceSmart: true }),
+    requestHeader(4, 'ForceSmart two-phase anchoring is active'),
   ])
   assert.equal(forceSmartModeOf(localOn, false), false)
 
   assert.equal(writeForceSmartSession('persisted-child', true), true)
   const persisted = session('persisted-child', 4, [
-    requestHeader(3, { forceSmart: true }),
+    requestHeader(3, 'ForceSmart two-phase anchoring is active'),
     requestHeader(4),
   ])
   const ctx = {
@@ -126,20 +122,15 @@ test('the ForceSmart sidecar overrides child-local and inherited legacy headers'
   assert.equal(await resolvePersistedForceSmart(ctx, 'persisted-child'), true)
 })
 
-test('an inherited ForceSmart marker is recognized when no sidecar exists', () => {
-  const inherited = session('inherited-only', 2, [
-    requestHeader(1, { forceSmart: true }),
+test('request headers never become a ForceSmart state channel', () => {
+  const promptOnly = session('prompt-only', 2, [
+    requestHeader(1, 'ForceSmart two-phase anchoring is active'),
   ])
-  assert.equal(forceSmartModeOf(inherited), true)
-
-  const smartOnly = session('inherited-smart-only', 2, [
-    requestHeader(1, { smart: true }),
-  ])
-  assert.equal(forceSmartModeOf(smartOnly), false)
+  assert.equal(forceSmartModeOf(promptOnly), false)
 })
 
-test('a ForceSmart sidecar identifies marker-free Minimal bootstrap headers', async () => {
-  const markerFree = session('marker-free', 0, [
+test('a ForceSmart sidecar identifies Minimal bootstrap headers', async () => {
+  const minimalHeader = session('minimal-header', 0, [
     {
       type: 'request/header',
       seq: 0,
@@ -152,25 +143,23 @@ test('a ForceSmart sidecar identifies marker-free Minimal bootstrap headers', as
       },
     },
   ])
-  assert.equal(forceSmartModeOf(markerFree, true), true)
-  assert.equal(forceSmartModeOf(markerFree, false), false)
+  assert.equal(forceSmartModeOf(minimalHeader, true), true)
+  assert.equal(forceSmartModeOf(minimalHeader, false), false)
 
-  assert.equal(writeForceSmartSession('marker-free', true), true)
+  assert.equal(writeForceSmartSession('minimal-header', true), true)
   const ctx = {
     get(name) {
       if (name !== 'sessionPersistence') return undefined
-      return { async load() { return { meta: markerFree.header, events: markerFree.events } } }
+      return { async load() { return { meta: minimalHeader.header, events: minimalHeader.events } } }
     },
   }
-  assert.equal(await resolvePersistedForceSmart(ctx, 'marker-free'), true)
+  assert.equal(await resolvePersistedForceSmart(ctx, 'minimal-header'), true)
 })
 
-test('ForceSmart wins mutual exclusion when a request contains both markers', () => {
-  const dualMarker = session('dual-marker', 0, [
-    requestHeader(0, { smart: true, forceSmart: true }),
-  ])
-  const rawSmart = smartModeOf(dualMarker)
-  const rawForceSmart = forceSmartModeOf(dualMarker)
+test('ForceSmart wins mutual exclusion when both sidecars are enabled', () => {
+  const dualEnabled = session('dual-enabled', 0, [requestHeader(0)])
+  const rawSmart = smartModeOf(dualEnabled, true)
+  const rawForceSmart = forceSmartModeOf(dualEnabled, true)
 
   assert.equal(rawSmart, true)
   assert.equal(rawForceSmart, true)

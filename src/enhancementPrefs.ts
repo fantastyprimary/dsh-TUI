@@ -34,8 +34,6 @@ interface EnhancementPrefs {
 
 export interface EnhancementPrefsDefinition {
   readonly file: string
-  /** Marker emitted by older dsh-tui builds; read-only migration input. */
-  readonly legacyPromptMarker: string
 }
 
 export interface EnhancementSelection {
@@ -148,31 +146,14 @@ export function writeEnhancementSession(
   return write(definition, { ...current, sessions: retained }, dir)
 }
 
-export function requestHeaderOf(event: EnhancementSessionEvent | undefined): EnhancementRequestHeader | undefined {
-  if (event?.type !== 'request/header') return undefined
-  const data = event.data as { readonly header?: EnhancementRequestHeader } | undefined
-  return data?.header
-}
-
-function headerEnabled(definition: EnhancementPrefsDefinition, event: EnhancementSessionEvent | undefined): boolean | undefined {
-  return requestHeaderOf(event)?.system?.includes(definition.legacyPromptMarker)
-}
-
 export function enhancementModeOf(
   definition: EnhancementPrefsDefinition,
   session: { header: EnhancementSessionHeader; events: readonly EnhancementSessionEvent[] },
   stored: boolean | undefined = readEnhancementSession(definition, String(session.header.id)),
 ): boolean {
-  // New builds keep enhancement state out of the model-visible prompt. The
-  // per-session sidecar is therefore authoritative when present; header
-  // markers are a migration fallback for sessions written by older builds.
-  if (stored !== undefined) return stored
-  const localStart = session.header.seedLength ?? 0
-  const localHeader = session.events.findLast(event => event.seq >= localStart && event.type === 'request/header')
-  const local = headerEnabled(definition, localHeader)
-  if (local !== undefined) return local
-  const inherited = headerEnabled(definition, session.events.findLast(event => event.type === 'request/header'))
-  return inherited ?? false
+  // Enhancement state is deliberately kept out of model-visible prompts.
+  // The per-session sidecar is the only source of truth.
+  return stored ?? false
 }
 
 export async function resolvePersistedEnhancement(

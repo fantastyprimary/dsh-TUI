@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -8,7 +9,9 @@ import { fileURLToPath } from 'node:url'
 import { apply } from '../force-smart-assets/force-bootstrap.mjs'
 import {
   apply as applyWindowsBash,
+  bashCandidatesFromGit,
   isWindowsSubsystemLauncher,
+  resolveShimTarget,
   resolveWindowsBash,
   windowsBashCandidates,
 } from '../force-smart-assets/windows-bash.mjs'
@@ -16,10 +19,10 @@ import {
 const BOOTSTRAP_MAX_TOKENS = 1024
 const assetRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'force-smart-assets')
 
-test('ForceSmart provenance and asset hashes remain pinned', () => {
+test('Smart-Pro provenance and asset hashes remain pinned', () => {
   const manifest = JSON.parse(readFileSync(join(assetRoot, 'manifest.json'), 'utf8'))
   assert.equal(manifest.enhancement.id, 'force-smart')
-  assert.equal(manifest.enhancement.displayName, 'ForceSmart')
+  assert.equal(manifest.enhancement.displayName, 'Smart-Pro')
   assert.equal(
     manifest.enhancement.sources.anchoredStandard.sha,
     'd97bec91a3d668f4cf1d03ee5f20aae84fb6f85c',
@@ -33,7 +36,7 @@ test('ForceSmart provenance and asset hashes remain pinned', () => {
     '3647a33fa467e0335260468614f6eed04b196c38',
   )
   assert.equal(manifest.enhancement.sources.liangshenReference.latestReviewedAt, '2026-08-16')
-  assert.match(manifest.enhancement.sources.liangshenReference.role, /not a ForceSmart product name or alias/)
+  assert.match(manifest.enhancement.sources.liangshenReference.role, /not a Smart-Pro product name or alias/)
   assert.deepEqual(
     manifest.enhancement.upstreamReview.map(item => [item.ref, item.decision]),
     [
@@ -87,11 +90,51 @@ test('Windows Bash discovery rejects the WSL launcher and continues to Git Bash'
   })
   assert.equal(resolved, String.raw`C:\Program Files\Git\usr\bin\bash.exe`)
   assert.deepEqual(attempts, [
+    // The PATH-visible git is tried first (heuristic tree lookup), then the
+    // conventional locations.
+    'git',
     String.raw`C:\Program Files\Git\bin\bash.exe`,
     String.raw`C:\Program Files\Git\usr\bin\bash.exe`,
   ])
   assert.equal(isWindowsSubsystemLauncher(String.raw`C:\Windows\System32\bash.exe`), true)
   assert.equal(isWindowsSubsystemLauncher(String.raw`C:\Program Files\Git\bin\bash.exe`), false)
+})
+
+test('Windows Bash discovery follows the PATH git to its installation tree', async () => {
+  // A real on-disk Scoop-style shim pair drives the sidecar resolution the
+  // same way a Windows run would read it.
+  const shimDir = mkdtempSync(join(tmpdir(), 'dsh-tui-shim-'))
+  const shimPath = join(shimDir, 'git.exe')
+  writeFileSync(shimPath, '')
+  writeFileSync(join(shimDir, 'git.shim'), 'path = "C:\\Users\\tester\\scoop\\apps\\git\\current\\bin\\git.exe"\n')
+
+  const attempts = []
+  const subprocess = {
+    async resolveExecutable(candidate) {
+      attempts.push(candidate)
+      if (candidate === 'git') return shimPath
+      if (candidate.endsWith(String.raw`git\current\bin\bash.exe`)) return candidate
+      throw new Error('missing')
+    },
+  }
+  const realGit = resolveShimTarget(shimPath)
+  assert.equal(realGit, String.raw`C:\Users\tester\scoop\apps\git\current\bin\git.exe`)
+  assert.deepEqual(bashCandidatesFromGit(String.raw`C:\Program Files\Git\cmd\git.exe`), [
+    String.raw`C:\Program Files\Git\bin\bash.exe`,
+    String.raw`C:\Program Files\Git\usr\bin\bash.exe`,
+  ])
+  assert.deepEqual(bashCandidatesFromGit(String.raw`D:\Git\mingw64\bin\git.exe`), [
+    String.raw`D:\Git\mingw64\bin\bash.exe`,
+    String.raw`D:\Git\mingw64\usr\bin\bash.exe`,
+    String.raw`D:\Git\bin\bash.exe`,
+    String.raw`D:\Git\usr\bin\bash.exe`,
+  ])
+  const resolved = await resolveWindowsBash(subprocess, {}, {})
+  assert.equal(resolved, String.raw`C:\Users\tester\scoop\apps\git\current\bin\bash.exe`)
+  assert.deepEqual(attempts, [
+    'git',
+    String.raw`C:\Users\tester\scoop\apps\git\current\bin\bash.exe`,
+  ])
 })
 
 test('Windows Bash is a real bash -c executor scoped to the session cwd', async () => {
@@ -125,15 +168,18 @@ test('Windows Bash is a real bash -c executor scoped to the session cwd', async 
     maxOutputBytes: 12_345,
   })
   assert.equal(definition.name, 'bash')
-  assert.match(definition.description, /Git Bash on Windows/)
+  assert.match(definition.description, /^Run commands in a bash shell\n/)  // Minimal-aligned first line; the Windows-specific notes follow
   assert.match(definition.description, /without OS sandbox confinement/)
   assert.equal(definition.timeoutMs, 123_000)
   assert.deepEqual(definition.parameters, {
-    command: {
-      type: 'string',
-      required: true,
-      description: 'The bash command to run. Relative path is preferred in the command.',
+    type: 'object',
+    properties: {
+      command: {
+        type: 'string',
+        description: 'The bash command to run. Relative path is preferred in the command.',
+      },
     },
+    required: ['command'],
   })
 
   const result = await definition.execute(
@@ -214,8 +260,27 @@ function fullAssembly(overrides = {}) {
       { name: 'approval:policy', text: 'ask' },
     ],
     tools: [
-      { name: 'bash' },
-      { name: 'str_replace_editor' },
+      {
+        name: 'bash',
+        description: 'registered bash schema',
+        parameters: {
+          type: 'object',
+          properties: { command: { type: 'string' } },
+          required: ['command'],
+        },
+      },
+      {
+        name: 'str_replace_editor',
+        description: 'registered editor schema',
+        parameters: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', enum: ['view', 'create', 'str_replace', 'insert'] },
+            path: { type: 'string' },
+          },
+          required: ['command', 'path'],
+        },
+      },
       { name: 'read' },
       { name: 'subagent' },
       { name: 'subagent_fork' },
@@ -285,25 +350,18 @@ test('fresh ForceSmart bootstrap aligns its system prompt to Minimal', async () 
   assert.deepEqual([...harness.listeners.keys()].sort(), [
     'agent/pre-step',
     'agent/request',
+    'session/event',
     'system-prompt/assemble',
   ])
-  for (const event of harness.listeners.keys()) {
+  for (const event of ['agent/pre-step', 'agent/request', 'system-prompt/assemble']) {
     assert.deepEqual(harness.options.get(event), { prepend: true }, event)
   }
 
-  const result = await assemble(harness, fullAssembly())
+  const downstream = fullAssembly()
+  const result = await assemble(harness, downstream)
   assert.deepEqual(result.tools.map(tool => tool.name), ['bash', 'str_replace_editor'])
-  assert.match(result.tools[0].description, /^Run commands in a bash shell\n/)
-  assert.deepEqual(result.tools[0].parameters, {
-    command: {
-      type: 'string',
-      required: true,
-      description: 'The bash command to run. Relative path is preferred in the command.',
-    },
-  })
-  assert.match(result.tools[1].description, /^Custom editing tool for viewing, creating and editing files\n/)
-  assert.deepEqual(result.tools[1].parameters.command.enum, ['view', 'create', 'str_replace', 'insert'])
-  assert.equal(result.tools[1].parameters.path.required, true)
+  assert.equal(result.tools[0], downstream.tools[0], 'bash schema must come from its registered executor')
+  assert.equal(result.tools[1], downstream.tools[1], 'editor schema must come from its registered executor')
   assert.deepEqual(result.contexts, [])
   assert.deepEqual(result.sections, [
     {
@@ -325,6 +383,35 @@ test('fresh ForceSmart bootstrap aligns its system prompt to Minimal', async () 
   }
   const filtered = await preStep(harness, decision)
   assert.deepEqual(filtered.messages, [retained])
+})
+
+test('ForceSmart hooks ignore every non-owning agent', async () => {
+  const harness = createHarness({ id: 'owner' })
+  const other = { session: { header: { id: 'other', seedLength: 0 }, events: [] } }
+  const assembled = fullAssembly()
+  const assemblyResult = await harness.listeners.get('system-prompt/assemble')(
+    undefined,
+    { agent: other },
+    async () => assembled,
+  )
+  assert.equal(assemblyResult, assembled)
+
+  const decision = {
+    kind: 'enter',
+    messages: [{ source: { kind: 'agent-instructions' }, content: 'keep for other agent' }],
+  }
+  const decisionResult = await harness.listeners.get('agent/pre-step')(
+    { agent: other },
+    async () => decision,
+  )
+  assert.equal(decisionResult, decision)
+
+  const requestOptions = { maxTokens: 8192 }
+  const requestResult = await harness.listeners.get('agent/request')(
+    { agent: other },
+    async () => requestOptions,
+  )
+  assert.equal(requestResult, requestOptions)
 })
 
 test('the permanent tool:goal section does not masquerade as an active goal', async () => {
@@ -357,21 +444,22 @@ test('an active plan promotes immediately and preserves the downstream assembly'
   assert.equal(await assemble(harness, assembled), assembled)
 })
 
-test('enhancement-owned bootstrap tools disappear from the promoted base surface', async () => {
+test('a disabled ForceSmart bootstrap leaves the complete base request untouched', async () => {
   const harness = createHarness({
-    id: 'owned-bootstrap-tools',
-    config: { ownedTools: ['str_replace_editor'] },
+    id: 'disabled-bootstrap',
+    config: { enabled: false },
   })
-  harness.session.events.push(anchoredAssistant())
   const assembled = fullAssembly()
-  const result = await assemble(harness, assembled)
+  assert.equal(await assemble(harness, assembled), assembled)
 
-  assert.deepEqual(
-    result.tools.map(tool => tool.name),
-    ['bash', 'read', 'subagent', 'subagent_fork', 'workflow'],
-  )
-  assert.deepEqual(result.sections, assembled.sections)
-  assert.deepEqual(result.contexts, assembled.contexts)
+  const decision = {
+    kind: 'enter',
+    messages: [{ source: { kind: 'agent-instructions' }, content: 'keep' }],
+  }
+  assert.equal(await preStep(harness, decision), decision)
+
+  const options = { maxTokens: 8192 }
+  assert.equal(await request(harness, options), options)
 })
 
 test('a real goal/change active event fails open with the downstream assembly', async () => {
@@ -459,6 +547,23 @@ for (const [id, event] of [
     assert.equal(await assemble(harness, assembled), assembled)
   })
 }
+
+test('explicit ForceSmart entry resets only the inherited Anchored phase', async () => {
+  const harness = createHarness({
+    id: 'explicit-reset',
+    seedLength: 2,
+    config: { resetAnchored: true },
+  })
+  harness.session.events.push(
+    { ...toolCall(), seq: 0 },
+    { type: 'session/end-seed', seq: 1 },
+  )
+
+  const result = await assemble(harness, fullAssembly())
+  assert.deepEqual(result.tools.map(tool => tool.name), ['bash', 'str_replace_editor'])
+  assert.deepEqual(result.contexts, [])
+  assert.equal(result.sections[0].text, 'You are a helpful software engineer assistant.')
+})
 
 test('bootstrap maxTokens restores an originally absent base value', async () => {
   const harness = createHarness({ id: 'undefined-max-tokens' })

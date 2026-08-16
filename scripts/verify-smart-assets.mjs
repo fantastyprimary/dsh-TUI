@@ -227,6 +227,7 @@ function routerHarness(
   agentPreset = 'standard',
   id = `smart-${agentPreset}`,
   model = 'deepseek-v4-flash',
+  config = {},
 ) {
   const listeners = new Map()
   const rootListeners = new Map()
@@ -261,7 +262,7 @@ function routerHarness(
     get(service) { return service === 'agent' ? agent : undefined },
     llm: { stream() { throw new Error('not used by this regression') } },
   }
-  applyRouter(ctx, {})
+  applyRouter(ctx, config)
   return {
     agent,
     appended,
@@ -418,6 +419,55 @@ test('fresh Standard + Smart exposes the exact RL tools and no runtime contexts'
   assert.equal(fresh.sections.find(section => section.name === 'router-persona').text, 'You are a helpful software engineer assistant.')
 })
 
+test('a resident but inactive plan:policy section does not disable the router', async () => {
+  // dsh-plan-mode registers `plan:policy` permanently; outside plan mode its
+  // resolved text is the empty string. A name-only test fails open on every
+  // real session and silently disables the whole router (Windows + WSL
+  // captures both showed the untouched native prompt).
+  const { agent, listeners } = routerHarness()
+  const tools = [
+    { name: 'bash' },
+    { name: 'str_replace_editor' },
+    { name: 'read' },
+    { name: 'write' },
+    { name: 'edit' },
+  ]
+  const routed = await listeners.get('system-prompt/assemble')(
+    undefined,
+    { agent },
+    async () => ({
+      sections: [
+        { name: 'persona', text: 'old' },
+        { name: 'plan:policy', text: '' },
+      ],
+      contexts: ['workspace'],
+      tools,
+    }),
+  )
+  assert.deepEqual(routed.tools.map(tool => tool.name), ['bash', 'str_replace_editor'])
+  assert.deepEqual(routed.sections.map(section => section.name), ['router-persona'])
+  assert.deepEqual(routed.contexts, [])
+})
+
+test('Smart prompt assembly is scoped to its owning agent', async () => {
+  const { listeners } = routerHarness('standard', 'owner')
+  const other = {
+    session: { id: 'other', header: { agentPreset: 'standard' }, events: [] },
+    options: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+  }
+  const downstream = {
+    sections: [{ name: 'persona', text: 'other agent persona' }],
+    contexts: [{ name: 'sandbox:policy', text: 'read-only' }],
+    tools: [{ name: 'read' }],
+  }
+  const result = await listeners.get('system-prompt/assemble')(
+    undefined,
+    { agent: other },
+    async () => downstream,
+  )
+  assert.equal(result, downstream)
+})
+
 test('active plan + Smart keeps the complete native workflow surface', async () => {
   const { agent, listeners } = routerHarness()
   const assembled = {
@@ -468,6 +518,32 @@ test('a tool-less first answer and inherited Smart fork history start promoted',
     const result = await listeners.get('system-prompt/assemble')(undefined, { agent }, async () => assembled)
     assert.equal(result, assembled, id)
   }
+})
+
+test('explicit Smart entry resets only the inherited Anchored phase', async () => {
+  const { agent, listeners, session } = routerHarness(
+    'standard',
+    'explicit-smart-reset',
+    'deepseek-v4-flash',
+    { resetAnchored: true },
+  )
+  session.events.push(
+    { type: 'assistant/message' },
+    { type: 'session/end-seed' },
+  )
+  session.header.seedLength = 2
+  const result = await listeners.get('system-prompt/assemble')(
+    undefined,
+    { agent },
+    async () => ({
+      sections: [{ name: 'persona', text: 'base' }],
+      contexts: [{ name: 'sandbox:policy', text: 'workspace-write' }],
+      tools: [{ name: 'bash' }, { name: 'str_replace_editor' }, { name: 'read' }],
+    }),
+  )
+  assert.deepEqual(result.sections, [{ name: 'router-persona', text: 'You are a helpful software engineer assistant.', order: 0 }])
+  assert.deepEqual(result.contexts, [])
+  assert.deepEqual(result.tools.map(tool => tool.name), ['bash', 'str_replace_editor'])
 })
 
 test('Smart preserves non-Standard native tools and contexts without its editor overlay', async () => {

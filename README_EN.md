@@ -171,17 +171,14 @@ The complete bilingual index is [`docs/README.md`](docs/README.md).
 
  - **Agent presets and intelligent enhancements**: `/preset` selects one of four
   official agent modes (`standard` / `code` / `minimal` / `cordis`) or the
-  TUI-bundled `liangshen` preset. Blank
-  sessions switch immediately; started sessions keep their preset. The default
-  persists in `~/.dsh-tui/agent-preset.json`, while `/model` selections persist
-  in `~/.dsh-tui/model.json`. `/smart` overlays Smart routing and
-  `/force-smart` overlays the ForceSmart Anchored controller. The enhancements
-  are mutually exclusive, remain separate from the preset roster, and switch
-  through a full-session fork that preserves conversation history and native
-  plan, goal, spawn, fork, and continuable-child boundaries. `liangshen` is a
-  standalone preset, while ForceSmart augments the selected base preset; they
-  are not aliases. See
-  [Configuration](docs/configuration.en.md#agent-preset).
+  TUI-bundled `liangshen` preset. `/smart` and `/smart-pro` enable independent
+  Smart routing and Smart-Pro Anchored overlays. The overlays are mutually
+  exclusive and switch through a full-session fork while preserving history,
+  route, cwd, preset, and workflow boundaries. `liangshen` remains an upstream
+  standalone preset: it is not an alias for either overlay and cannot be
+  stacked with them. The canonical comparison, promotion, platform-shell, and
+  persistence rules live in
+  [Configuration](docs/configuration.en.md#smart-and-smart-pro-enhancements).
 - **Custom themes**: the `/theme` picker (`auto` follows the system/terminal background,
   built-in `light` / `dark` / `dark-ansi`) also accepts custom themes from
   `~/.dsh-tui/themes/<name>.json`; selecting one hot-swaps and persists it. Precedence is

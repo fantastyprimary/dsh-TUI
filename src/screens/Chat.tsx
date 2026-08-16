@@ -588,11 +588,11 @@ export function Chat({
         void channel.switchSmart(enabled)
         return true
       }
-      case 'force-smart': {
+      case 'smart-pro': {
         const input = rawInput.trim().toLowerCase()
         if (input === 'status') {
           setHelpOpen(false)
-          channel.pushLocal('/force-smart', [
+          channel.pushLocal('/smart-pro', [
             t('force-smart-current', { state: channel.forceSmart ? 'on' : 'off' }),
             t('force-smart-usage'),
           ])
@@ -871,7 +871,7 @@ export function Chat({
           `${t('status-model', { model: channel.model })}${channel.reasoningEffort ? ` · ${capitalize(channel.reasoningEffort)} effort` : ''}`,
           `${t('status-state', { state: channel.working ? t('status-working') : t('status-idle') })}`,
           `${t('status-session', { id: channel.agentId })}`,
-          `Preset ${channel.agentPreset ?? 'host'} · Smart ${channel.smart ? 'on' : 'off'} · ForceSmart ${channel.forceSmart ? 'on' : 'off'}`,
+          `Preset ${channel.agentPreset ?? 'host'} · Smart ${channel.smart ? 'on' : 'off'} · Smart-Pro ${channel.forceSmart ? 'on' : 'off'}`,
           `${t('status-dir', { cwd: channel.displayCwd })}${channel.gitBranch ? ` · ${channel.gitBranch}` : ''}`,
           `Tokens ${formatTokens(channel.tokens.input)} in → ${formatTokens(channel.tokens.output)} out`,
         ]

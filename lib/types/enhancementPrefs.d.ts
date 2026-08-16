@@ -18,8 +18,6 @@ export interface EnhancementRequestHeader {
 }
 export interface EnhancementPrefsDefinition {
     readonly file: string;
-    /** Marker emitted by older dsh-tui builds; read-only migration input. */
-    readonly legacyPromptMarker: string;
 }
 export interface EnhancementSelection {
     readonly smart: boolean;
@@ -31,7 +29,6 @@ export declare function readEnhancementDefault(definition: EnhancementPrefsDefin
 export declare function writeEnhancementDefault(definition: EnhancementPrefsDefinition, enabled: boolean, dir?: string): boolean;
 export declare function readEnhancementSession(definition: EnhancementPrefsDefinition, sessionId: string, dir?: string): boolean | undefined;
 export declare function writeEnhancementSession(definition: EnhancementPrefsDefinition, sessionId: string, enabled: boolean, dir?: string): boolean;
-export declare function requestHeaderOf(event: EnhancementSessionEvent | undefined): EnhancementRequestHeader | undefined;
 export declare function enhancementModeOf(definition: EnhancementPrefsDefinition, session: {
     header: EnhancementSessionHeader;
     events: readonly EnhancementSessionEvent[];
