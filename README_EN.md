@@ -79,6 +79,11 @@ commands), then `dsh-tui` and `dsh --profile dsh-tui` are equivalent.
 `dsh-tui --resume` restores the most recently selected session; on Windows
 the repository's `dsh-tui.cmd` works the same way.
 
+For running dsh-TUI inside VS Code — directly in the integrated terminal or
+via the `dsh-tui-vscode` companion extension (one-click start/resume and
+editor integration) — see
+[Running dsh-TUI in VS Code](docs/vscode.en.md).
+
 See [Getting started](docs/getting-started.en.md) for profile composition,
 source builds, and troubleshooting.
 
@@ -155,6 +160,7 @@ so keep using `Ctrl`.
 | [Themes](docs/themes.en.md) | Built-in themes, background detection, custom JSON themes, validation |
 | [Interaction and commands](docs/interaction.en.md) | Keyboard, mouse, questionnaires, slash commands, session workflows |
 | [Architecture and limitations](docs/architecture.en.md) | Runtime path, rendering, persistence, security boundary, known limitations |
+| [VS Code guide](docs/vscode.en.md) | Running dsh-tui in the VS Code integrated terminal and the `dsh-tui-vscode` companion extension |
 | [Contributing](docs/contributing.en.md) | Contribution workflow, repository map, build artifacts, verification matrix, change rules |
 | [Plugin development](docs/plugins.en.md) | Plugin seams (session events / slots / skills / themes / prompt sections), contract, conventions, listing |
 

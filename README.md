@@ -17,8 +17,13 @@
 
 # dsh-TUI
 
-> 一个美观且实用的 Claude Code 风格 TUI 插件：像素鲸鱼顶栏、双流光大字、实时工作状态行、思考流式展开、双击 Esc 时间回溯、蓝白上下文进度条 + TPS 仪表。
-> 零核心改动，纯插件挂载。安装插件即可启用，卸载后不会留下核心补丁。
+>一个美观且实用的 Claude Code 风格 TUI 插件：像素鲸鱼顶栏、双流光大字、实时工作状态行、思考流式展开、双击 Esc 时间回溯、蓝白上下文进度条 + TPS 仪表。
+>零核心改动，纯插件挂载。安装插件即可启用，卸载后不会留下核心补丁。
+>献给钟爱tui的各位极客们~
+>
+>A beautiful, practical Claude Code-style TUI plugin: pixel whale top bar, dual flowing-glow title, real-time status line, streaming thought expansion, double-Esc time rewind, blue-white context progress bar + TPS gauge.
+>Zero core changes, pure plugin mounting. Install to enable; uninstall leaves no core patches.
+>For all TUI-loving geeks~
 
 ## 🎉 官方收录
 
@@ -70,6 +75,10 @@ sh install.sh
 ```
 
 `dsh-tui --resume` 恢复上次会话；Windows 也可用仓库里的 `dsh-tui.cmd`（等价）。
+
+在 VS Code 中运行的完整指南（内置终端直接使用 + companion 扩展
+`dsh-tui-vscode` 一键启动/恢复与编辑器集成）见
+[在 VS Code 中运行 dsh-TUI](docs/vscode.md)。
 
 TUI 启动后会在后台检查 npm 是否有新版本；发现更新时会提示，输入 `/update`
 即可自动更新并重启恢复当前会话。
@@ -142,6 +151,7 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 | [主题系统](docs/themes.md) | 内置主题、自动检测、自定义 JSON 主题与校验规则 |
 | [交互与命令](docs/interaction.md) | 快捷键、鼠标、问卷、slash command 与会话工作流 |
 | [架构与限制](docs/architecture.md) | 运行链路、渲染与持久化设计、安全边界、已知限制 |
+| [VS Code 使用指南](docs/vscode.md) | 在 VS Code 集成终端运行 dsh-tui 与 companion 扩展 `dsh-tui-vscode` |
 | [贡献与开发约定](docs/contributing.md) | 贡献流程、仓库地图、构建产物、验证矩阵与修改规则 |
 | [插件开发指南](docs/plugins.md) | 插件接缝（会话事件 / 槽位 / 技能 / 主题 / prompt 段）、契约、规范与收录 |
 
