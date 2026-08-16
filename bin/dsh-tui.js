@@ -9,7 +9,11 @@
  *   2. 检测 $DSH_HOME/profiles/dsh-tui 是否已初始化，未初始化则自动执行
  *      `dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui@<本包版本>`
  *      自举——版本号与本包对齐，避免 pnpm store 缓存带来的旧版漂移；
- *   3. 已初始化但版本与本包不一致时打印一行提示（TUI 内 /update 或重新 add）；
+ *   3. 已初始化但版本与本包不一致时按方向处理（issue #183）：profile
+ *      更新（前向错位）打印一行提示后继续启动（TUI 内 /update 或重新
+ *      add）；profile 次版本更旧（反向错位）拒绝启动并给出对齐命令——
+ *      该方向 dsh CLI 会把启动器的 bundle patch 套到 profile 旧包上，
+ *      启动必然以模块解析错误崩溃；
  *   4. 透传全部参数启动 `dsh --profile dsh-tui`。
  *
  * `--resume` 由本启动器拦截：读取 TUI 保留的 ~/.dsh-tui/resume.txt
@@ -64,6 +68,29 @@ const MSG = {
       `[dsh-tui] 提示：profile 内运行的是 v${installed}，而启动器是 v${own}。\n` +
       `  更新 profile：在 TUI 内执行 /update，或运行：\n` +
       `  dsh plugin --profile ${PROFILE} add ${PACKAGE}@latest`,
+  },
+  // Reverse skew (issue #183): the dsh CLI reads the bundle patch from the
+  // FIRST copy found from its own install anchor — this globally installed
+  // launcher — while the plugin modules load from the profile's copy. A
+  // launcher minor NEWER than the profile means the patch may reference
+  // subpath exports the profile's older package does not have, and boot
+  // crashes opaquely (ERR_PACKAGE_PATH_NOT_EXPORTED) before any TUI code
+  // runs. Fail loud with the fix instead. (Forward skew degrades to a
+  // working local-workspace fallback since 0.7.2 — soft note below.)
+  profileOlderThanLauncher: {
+    en: (installed, own) =>
+      `[dsh-tui] cannot start: the profile runs v${installed} but this launcher is v${own}.\n` +
+      `  The launcher's bundle patch would be applied to the profile's older package,\n` +
+      `  which does not export everything the patch references — boot would crash.\n` +
+      `  Align the profile with the launcher:\n` +
+      `  dsh plugin --profile ${PROFILE} add ${PACKAGE}@${own}\n` +
+      `  (or update everything to the latest release: dsh plugin --profile ${PROFILE} add ${PACKAGE}@latest)`,
+    zh: (installed, own) =>
+      `[dsh-tui] 无法启动：profile 内运行的是 v${installed}，而启动器是 v${own}。\n` +
+      `  启动器的 bundle patch 会套用到 profile 里的旧版包上，其中缺少 patch 引用\n` +
+      `  的子路径导出——启动会以模块解析错误崩溃。请让 profile 与启动器对齐：\n` +
+      `  dsh plugin --profile ${PROFILE} add ${PACKAGE}@${own}\n` +
+      `  （或全部升到最新：dsh plugin --profile ${PROFILE} add ${PACKAGE}@latest）`,
   },
   launchFailed: {
     en: err => `[dsh-tui] Failed to launch: ${err.message}`,
@@ -126,28 +153,54 @@ if (installedVersion === undefined) {
     process.exit(add.status ?? 1)
   }
 } else if (installedVersion !== ownVersion) {
+  // Reverse skew is fatal (see MSG.profileOlderThanLauncher): compare
+  // major/minor only — patch-level differences never move the patch surface.
+  const majorMinor = v => v.split('-')[0].split('.').slice(0, 2).map(Number)
+  const [installedMajor, installedMinor] = majorMinor(installedVersion)
+  const [ownMajor, ownMinor] = majorMinor(ownVersion)
+  if (installedMajor < ownMajor || (installedMajor === ownMajor && installedMinor < ownMinor)) {
+    console.error(MSG.profileOlderThanLauncher[lang](installedVersion, ownVersion))
+    process.exit(1)
+  }
   console.error(MSG.versionMismatch[lang](installedVersion, ownVersion))
 }
 
 // --- 3. --resume 拦截 ---------------------------------------------------------
 // 换名过渡（issue #120）：全局 bin 与 profile 内 TUI 包版本可能错位，所以
 // env 双写（新旧名都设），文件读取新路径优先、旧路径兜底。
+// 支持的形态（对齐 issue #53 的诉求）：
+//   --resume <id> / --resume=<id>   恢复指定会话
+//   --resume / -c / --continue      恢复最近一次会话（读 resume.txt）
+// 其余位置参数原样透传给 dsh CLI，由插件经 ctx.cmdlineArgs 读取（初始 prompt）。
+const setResumeEnv = sessionId => {
+  process.env.DSH_TUI_RESUME_SESSION = sessionId
+  process.env.DSH_CC_RESUME_SESSION = sessionId
+}
+const readLastResumeTarget = () => {
+  for (const dir of ['.dsh-tui', '.dsh-cc']) {
+    try {
+      const sessionId = readFileSync(join(homedir(), dir, 'resume.txt'), 'utf8').trim()
+      if (sessionId) return sessionId
+    } catch {
+      // 没有历史会话可恢复——静默忽略，正常冷启动。
+    }
+  }
+  return ''
+}
 const args = []
-for (const a of process.argv.slice(2)) {
-  if (a === '--resume') {
+const argv = process.argv.slice(2)
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i]
+  if (a === '--resume' || a === '-c' || a === '--continue' || a.startsWith('--resume=')) {
     let sessionId = ''
-    for (const dir of ['.dsh-tui', '.dsh-cc']) {
-      try {
-        sessionId = readFileSync(join(homedir(), dir, 'resume.txt'), 'utf8').trim()
-        if (sessionId) break
-      } catch {
-        // 没有历史会话可恢复——静默忽略，正常冷启动。
-      }
+    if (a.startsWith('--resume=')) {
+      sessionId = a.slice('--resume='.length).trim()
+    } else if (a === '--resume' && argv[i + 1] !== undefined && !argv[i + 1].startsWith('-')) {
+      sessionId = argv[++i].trim()
     }
-    if (sessionId) {
-      process.env.DSH_TUI_RESUME_SESSION = sessionId
-      process.env.DSH_CC_RESUME_SESSION = sessionId
-    }
+    // 裸形态（含 -c/--continue）回退到 resume.txt。
+    if (!sessionId) sessionId = readLastResumeTarget()
+    if (sessionId) setResumeEnv(sessionId)
   } else if (
     process.env.DSH_TUI_WORKSPACE_TARGET === undefined
     && !a.startsWith('-')

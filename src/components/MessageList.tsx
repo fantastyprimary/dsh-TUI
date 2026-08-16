@@ -57,6 +57,8 @@ export function MessageList({
   forceMountRowId,
   newSinceRowId,
   onUnseenCount,
+  failureHintRowId,
+  failureHint,
 }: {
   rows: readonly ChatRow[]
   expanded: boolean
@@ -81,6 +83,14 @@ export function MessageList({
   newSinceRowId?: number | null
   /** Reports how many new rows still sit below the viewport bottom edge. */
   onUnseenCount?: (count: number) => void
+  /**
+   * Row id that should carry the trajectory footnote — the newest unseen
+   * failure, or null. Exactly one row ever carries it: repeating the pointer
+   * under every historical failure is the clutter this design avoids.
+   */
+  failureHintRowId?: number | null
+  /** Footnote text, e.g. `ctrl+t for the full trajectory`. */
+  failureHint?: string
 }) {
   const hiddenCount = rows.length - MAX_RENDERED_ROWS
   // The thinking filter runs BEFORE virtualization so window indices line up.
@@ -311,6 +321,7 @@ export function MessageList({
               toolResultText={tool?.resultText}
               toolResultFull={tool?.resultFull}
               toolErrorText={tool?.errorText}
+              toolFootnote={failureHintRowId === row.id ? failureHint : undefined}
               toolCallView={tool?.callView}
               toolResultView={tool?.resultView}
               toolStartedAt={tool?.startedAt}
@@ -359,6 +370,8 @@ type MemoRowProps = {
   toolResultText: string | undefined
   toolResultFull: string | undefined
   toolErrorText: string | undefined
+  /** Trajectory footnote, present on at most one row (the newest failure). */
+  toolFootnote: string | undefined
   /** Presentation views are set-once stable refs (creation / settle), so a
    *  plain ref compare stays correct under the in-place mutation model. */
   toolCallView: ToolCallView | undefined
@@ -394,6 +407,7 @@ function TranscriptRow({
   toolResultText,
   toolResultFull,
   toolErrorText,
+  toolFootnote,
   toolCallView,
   toolResultView,
   toolStartedAt,
@@ -519,6 +533,7 @@ function TranscriptRow({
             verbose={isExpanded || expanded}
             isSelected={isSelected}
             isExpanded={isExpanded}
+            footnote={toolFootnote}
           />
         </Box>
       )

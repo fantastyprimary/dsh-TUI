@@ -1,11 +1,12 @@
 import React from 'react'
 import { t, getLang, setLang, isLang, writeLangPref, subscribeLang, type I18nKey } from '../i18n.js'
-import { Box, Text, useInput, ScrollBox, type ScrollBoxHandle, useTheme, useTerminalSize } from '../ui.js'
+import { AlternateScreen, Box, Text, useInput, ScrollBox, type ScrollBoxHandle, useTheme, useTerminalSize } from '../ui.js'
 import { POINTER } from '../cc/figures.js'
 import { isMod, isPlainReturnInput, modLabel } from '../utils/modifiers.js'
 import { formatTokens } from '../cc/format.js'
+import { homeDir } from '../utils/paths.js'
 import type { LlmModelInfo } from '../dsh-adapter/types.js'
-import type { Channel, ChatRow, EffortOption, PresetOption } from '../dsh-adapter/channel.js'
+import { sessionCwdMatches, type Channel, type ChatRow, type EffortOption, type PresetOption } from '../dsh-adapter/channel.js'
 import type { QuestionStore } from '../dsh-adapter/questions.js'
 import { runProviderWizard } from '../dsh-adapter/providerWizard.js'
 import { ApprovalStore } from '../dsh-adapter/approvals.js'
@@ -18,7 +19,6 @@ import { useTerminalFocus } from '../ink/hooks/use-terminal-focus.js'
 import { useCopyOnSelect } from '../ink/hooks/use-copy-on-select.js'
 import { useSelection } from '../ink/hooks/use-selection.js'
 import { NoSelect } from '../ink/components/NoSelect.js'
-import instances from '../ink/instances.js'
 import { LogoHeader, MessageList } from '../components/MessageList.js'
 import { OverlayAbove } from '../components/OverlayAbove.js'
 import { PromptInput, type PromptController } from '../components/PromptInput.js'
@@ -28,7 +28,7 @@ import { StatusLine } from './StatusLine.js'
 import { WorkingSpinner, useThinkingStatus } from '../components/WorkingSpinner.js'
 import { ActivityLine, contextPressurePct } from '../components/ActivityLine.js'
 import { ModelPicker } from '../components/ModelPicker.js'
-import { ResumePicker, type ResumePickerMode } from '../components/ResumePicker.js'
+import { SessionBrowser } from './SessionBrowser.js'
 import { WorkspacePicker } from '../components/WorkspacePicker.js'
 import { WorkspaceFlowPicker } from '../components/WorkspaceFlowPicker.js'
 import type { TuiWorkspaceCommandResult, TuiWorkspaceTarget } from '../workspaces.js'
@@ -43,19 +43,19 @@ import { HistorySearchDialog } from '../components/HistorySearchDialog.js'
 import { RewindPicker } from '../components/RewindPicker.js'
 import { BtwPanel } from '../components/BtwPanel.js'
 import { setClipboard } from '../ink/termio/osc.js'
-import { TraceView, TRACE_WINDOW } from '../components/TraceView.js'
-import {
-  extendTrace,
-  filterTraceEntries,
-  TRACE_FILTERS,
-  type TraceBuild,
-  type TraceEntry,
-  type TraceFilter,
-} from '../dsh-adapter/trace.js'
+import instances from '../ink/instances.js'
+import { useAnimationFrame } from '../ink/hooks/use-animation-frame.js'
+import { TrajectoryScene } from './TrajectoryScene.js'
+import { extendTrajectory, projectWave, type TrajBuild } from '../dsh-adapter/trajectory/index.js'
+import { miniWakeWidth } from '../components/trajectory/MiniWake.js'
+import { readTrajectorySeen, writeTrajectorySeen } from '../trajectoryPrefs.js'
+import type { SessionEvent } from '../dsh-adapter/types.js'
 import { LoadingState } from '../components/design-system/LoadingState.js'
 import { Pane } from '../components/design-system/Pane.js'
 import { loadHistory, type HistoryEntry } from '../history.js'
-import type { SessionRecord } from '../sessionHistory.js'
+
+/** Shared empty snapshot for hosts whose channel has no event log. */
+const NO_EVENTS: readonly SessionEvent[] = []
 
 /** Row kinds the message-selection cursor can land on. */
 const SELECTABLE_KINDS = new Set<ChatRow['kind']>([
@@ -72,9 +72,6 @@ const SELECTABLE_KINDS = new Set<ChatRow['kind']>([
 /** Shared empty list for mode-gated derived rows (stable reference, so
  *  downstream consumers never see a changing prop when the mode is off). */
 const NO_ROWS: readonly ChatRow[] = []
-
-/** Shared empty list for the closed `/trace` view (see NO_ROWS). */
-const NO_TRACE_ENTRIES: readonly TraceEntry[] = []
 
 /** `max` → `Max` (effort levels arrive lower-case from the adapter). */
 function capitalize(text: string): string {
@@ -140,6 +137,8 @@ export function Chat({
   approvalStore,
   onExit,
   onUpdate,
+  fullscreen = false,
+  trajectorySeen: trajectorySeenProp,
 }: {
   channel: Channel
   questionStore: QuestionStore
@@ -152,6 +151,23 @@ export function Chat({
   onExit: () => void
   /** Update the installed package and restart the current TUI process. */
   onUpdate?: () => void
+  /**
+   * True when the host already wrapped this tree in `<AlternateScreen>`
+   * (`fullscreen: true`). Both full-screen surfaces need this — the trajectory
+   * scene and the session browser: entering the alt
+   * screen a second time is harmless, but the inner unmount's DEC 1049 exit
+   * would drop the whole app back to the main screen.
+   */
+  fullscreen?: boolean
+  /**
+   * Whether the trajectory has been opened before on this machine.
+   *
+   * A prop rather than a filesystem read inside the component: a render
+   * initializer touching disk is the wrong layer, and hosts that already know
+   * (or tests that need determinism) can simply say. Falls back to the
+   * persisted flag when the host does not supply one.
+   */
+  trajectorySeen?: boolean
 }) {
   // Re-render whenever the channel mutates; rows/status are read fresh below.
   React.useSyncExternalStore(channel.subscribe, () => channel.version)
@@ -195,12 +211,9 @@ export function Chat({
   const [modelPickerOpen, setModelPickerOpen] = React.useState(false)
   const [models, setModels] = React.useState<readonly LlmModelInfo[]>([])
   const [modelIndex, setModelIndex] = React.useState(0)
-  const [resumePickerOpen, setResumePickerOpen] = React.useState(false)
-  const [resumeSessions, setResumeSessions] = React.useState<readonly SessionRecord[]>([])
-  const [resumeIndex, setResumeIndex] = React.useState(0)
-  /** `/resume` session management (issue #112): plain selection, a delete
-   *  confirmation (ctrl+d), or the inline rename input (ctrl+r). */
-  const [resumeMode, setResumeMode] = React.useState<ResumePickerMode>('list')
+  /** `/resume` opens the session browser, a screen rather than a panel. It
+   *  owns its own selection, filters and keyboard — Chat only opens it. */
+  const [browserOpen, setBrowserOpen] = React.useState(false)
   const [workspacePickerOpen, setWorkspacePickerOpen] = React.useState(false)
   const [workspaceTargets, setWorkspaceTargets] = React.useState<readonly TuiWorkspaceTarget[]>([])
   const [workspaceIndex, setWorkspaceIndex] = React.useState(0)
@@ -215,7 +228,6 @@ export function Chat({
   } | null>(null)
   const workspaceFlowRequestRef = React.useRef(0)
   const workspaceFlowAbortRef = React.useRef<AbortController | null>(null)
-  const [resumeRenameText, setResumeRenameText] = React.useState('')
   /** `/activity` indicator picker (pi extension's interactive select). */
   const [activityPickerOpen, setActivityPickerOpen] = React.useState(false)
   const [activityIndex, setActivityIndex] = React.useState(0)
@@ -259,14 +271,40 @@ export function Chat({
     setBtw(null)
   }
   React.useEffect(() => () => btwAbortRef.current?.abort(), [])
-  /** `/trace` trajectory view (issue #80): open state + type filter + cursor.
-   *  `traceFollowRef` pins the cursor to the newest entry while the view
-   *  follows a running session; any upward scroll unpins it. */
-  const [traceOpen, setTraceOpen] = React.useState(false)
-  const [traceFilter, setTraceFilter] = React.useState<TraceFilter>('all')
-  const [traceCursor, setTraceCursor] = React.useState(0)
-  const traceFollowRef = React.useRef(true)
-  const traceBuildRef = React.useRef<TraceBuild | null>(null)
+  /**
+   * The trajectory scene (issue #80 evolution). Unlike every other overlay
+   * here it is not a panel but a whole screen: while open, Chat renders the
+   * scene INSTEAD of the conversation (see the early return below) and hands
+   * it the keyboard. Chat itself stays mounted, so scroll position, pickers
+   * and in-flight turn state survive the round trip untouched.
+   */
+  const [sceneOpen, setSceneOpen] = React.useState(false)
+  /**
+   * Close the scene.
+   *
+   * Leaving the alternate screen makes the terminal restore the main buffer
+   * itself; Ink then repaints once, because `setAltScreenActive(false)` blanks
+   * its front frame. In inline mode that costs one frame of scrollback per
+   * round trip — the same, already-accepted cost as the Ctrl+X external-editor
+   * handoff, and bounded per OPEN rather than per keystroke. Making it zero
+   * needs the render core to save and restore the pre-alt front frame, which
+   * is a separate change to `setAltScreenActive` and deliberately not made
+   * here. `verify-trace-scene` pins the property that matters meanwhile:
+   * navigating inside the scene adds nothing at all.
+   */
+  const closeScene = React.useCallback(() => {
+    setSceneOpen(false)
+  }, [])
+
+  /** Open the scene, mark failures seen, and retire the key hint for good. */
+  const openScene = React.useCallback(() => {
+    seenFailuresRef.current = trajectoryRef.current?.counts.errors ?? 0
+    setTrajectorySeen(previous => {
+      if (!previous) writeTrajectorySeen()
+      return true
+    })
+    setSceneOpen(true)
+  }, [])
   /** Startup context panel: expanded by header click or Ctrl+T. */
   const [loadedContextOpen, setLoadedContextOpen] = React.useState(false)
   /** `/` transcript search (less-style incsearch, ported from CC's REPL). */
@@ -695,15 +733,10 @@ export function Chat({
         channel.compact()
         return true
       case 'trace':
-        // Open the trajectory view (issue #80): the timeline reads the live
-        // session event log via channel.traceEvents() and follows new events
-        // in real time (every session event bumps the channel version, which
-        // re-renders this screen). Opens pinned to the newest entry.
+        // `/trace` is kept as the discoverable spelling of Ctrl+T: the
+        // command menu is where a user finds out the trajectory exists.
         setHelpOpen(false)
-        traceFollowRef.current = true
-        setTraceFilter('all')
-        setTraceCursor(0)
-        setTraceOpen(true)
+        openScene()
         return true
       case 'help':
         setHelpOpen(true)
@@ -762,22 +795,10 @@ export function Chat({
       }
       case 'resume': {
         setHelpOpen(false)
-        void (async () => {
-          const sessions = await channel.listSessions()
-          // The current session cannot be resumed into itself (agents.resume
-          // rejects a live session), so it is excluded from the picker —
-          // otherwise the fresh empty session of this launch always tops the
-          // list as an unopenable row.
-          const pickable = sessions.filter(session => session.id !== channel.agentId)
-          setResumeSessions(pickable)
-          if (pickable.length === 0) {
-            channel.notify(t('resume-none-in-cwd'))
-            return
-          }
-          setResumeMode('list')
-          setResumePickerOpen(true)
-          setResumeIndex(0)
-        })()
+        // The browser opens immediately and loads its own list. Waiting for
+        // the listing here would make `/resume` feel slower the more history
+        // a project has, which is exactly backwards.
+        setBrowserOpen(true)
         return true
       }
       case 'workspace': {
@@ -1109,29 +1130,76 @@ export function Chat({
     }
   }
 
-  // `/trace` timeline: extend the incremental build with the session's
-  // current event snapshot, then apply the /thinking gate and the type
-  // filter. Computed per render while open (channel events bump `version`);
-  // extendTrace only consumes the appended tail, so a long session costs
-  // O(new events), never O(log), per frame.
-  if (traceOpen) {
-    traceBuildRef.current = extendTrace(traceBuildRef.current, channel.traceEvents())
-  }
-  const traceEntries: readonly TraceEntry[] = traceOpen && traceBuildRef.current !== null
-    ? filterTraceEntries(
-      thinkingVisible
-        ? traceBuildRef.current.entries
-        : traceBuildRef.current.entries.filter(entry => entry.kind !== 'thinking'),
-      traceFilter,
-    )
-    : NO_TRACE_ENTRIES
-  /** Effective cursor: pinned to the newest entry while following, clamped
-   *  against the (possibly filtered) list otherwise. */
-  const traceCursorClamped = traceEntries.length === 0
-    ? 0
-    : traceFollowRef.current
-      ? traceEntries.length - 1
-      : Math.min(traceCursor, traceEntries.length - 1)
+  /**
+   * The session's trajectory projection, folded here rather than inside the
+   * scene.
+   *
+   * Two things fall out of owning it at this level: the status-line chip can
+   * show live counters without a second fold, and opening the scene is
+   * instant because the build is already warm. The fold is incremental — it
+   * consumes only events appended since the last render — so an idle
+   * conversation pays nothing for it.
+   */
+  const trajectoryRef = React.useRef<TrajBuild | null>(null)
+  trajectoryRef.current = extendTrajectory(
+    trajectoryRef.current,
+    // oxlint-disable-next-line typescript/no-unnecessary-condition -- runtime guard: headless hosts render Chat with a partial channel
+    channel.traceEvents?.() ?? NO_EVENTS,
+  )
+  const trajectory = trajectoryRef.current
+
+  /**
+   * The status-line wake.
+   *
+   * Projected onto a dozen-odd columns and memoized against the ledger's row
+   * count, so it recomputes when the session actually grows rather than on
+   * every animation tick. The tick only re-colours the cells it already has.
+   */
+  const { columns: terminalColumns } = useTerminalSize()
+  const wakeWidth = miniWakeWidth(terminalColumns)
+  const wakeBand = React.useMemo(
+        () =>
+      wakeWidth === 0
+        ? undefined
+        // `sequence`, not the scene's `compressed`: at sixteen columns an idle
+        // gap cannot express how long it was, so it only reads as a broken
+        // strip. Equal-width columns give a continuous silhouette, which is
+        // the only thing this size can actually say.
+        // Width is also clamped to the row count: with fewer rows than
+        // columns the strip would be mostly gaps, which reads as broken
+        // rather than as short. It simply grows as the session does.
+        : projectWave(trajectory.nodes, Math.min(wakeWidth, trajectory.nodes.length), 'sequence'),
+    // The node array is mutated in place by the incremental fold, so its
+    // length is the honest dependency; its identity never changes.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [trajectory.nodes, trajectory.counts.rows, wakeWidth],
+  )
+  const [wakeTickRef, wakeTime] = useAnimationFrame(channel.working ? 120 : null)
+  /**
+   * The key hint beside the strip retires itself once the trajectory has been
+   * opened — teaching belongs in the first minute, not on every frame forever.
+   */
+  const [trajectorySeen, setTrajectorySeen] = React.useState(() => trajectorySeenProp ?? readTrajectorySeen())
+
+  /**
+   * The one failure worth pointing at.
+   *
+   * Only the LATEST failed tool row carries the footnote, and only while its
+   * failures are unseen. Repeating it under every historical failure would be
+   * exactly the clutter the whole entry design is trying to avoid — one
+   * pointer, at the newest problem, is enough to find the rest.
+   */
+  const seenFailuresRef = React.useRef(0)
+  const unreadFailures = Math.max(0, trajectory.counts.errors - seenFailuresRef.current)
+  const failureHintRowId = React.useMemo(() => {
+    if (unreadFailures === 0) return null
+    for (let index = channel.rows.length - 1; index >= 0; index--) {
+      const row = channel.rows[index]
+      if (row?.kind === 'tool' && row.tool?.status === 'error') return row.id
+    }
+    return null
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel.rows, channel.version, unreadFailures])
 
   // Row seeking under layout virtualization: a mounted row seeks directly;
   // an unmounted one is force-mounted first, then sought by the completion
@@ -1228,6 +1296,10 @@ export function Chat({
     // swallowed there). Chat registered first, so an early return here does
     // not block the event from reaching the panel.
     if (btw !== null) return
+    // Same for the session browser: it renders instead of the conversation,
+    // so every key belongs to it — including the plain letters that drive its
+    // search box, which Chat would otherwise route into the prompt.
+    if (browserOpen) return
     // The questionnaire / approval panel owns the keyboard while one is
     // pending (the panel's own useInput handles ↑/↓/Space/Tab/Enter/Esc;
     // the prompt input is unmounted, so nothing else should see these keys).
@@ -1423,110 +1495,6 @@ export function Chat({
       }
       return
     }
-    if (resumePickerOpen) {
-      const resumeSession = resumeSessions[resumeIndex]
-      // Session management modes (issue #112): the list keys stay untouched
-      // until ctrl+d/ctrl+r switch into a sub-mode, each with Enter/Esc.
-      if (resumeMode === 'confirm-delete') {
-        if (plainReturn) {
-          setResumeMode('list')
-          // oxlint-disable-next-line typescript/no-unnecessary-condition -- runtime guard: out-of-range index on an empty list
-          if (resumeSession) {
-            const target = resumeSession
-            void (async () => {
-              const ok = await channel.deleteSession(target.id)
-              if (!ok) {
-                channel.notify(t('resume-delete-failed', { name: target.title || target.id }), { color: 'error' })
-                return
-              }
-              channel.notify(t('resume-deleted', { name: target.title || target.id }))
-              // Refresh right away so the row disappears in place; closing
-              // the picker when nothing resumable remains.
-              const sessions = await channel.listSessions()
-              const pickable = sessions.filter(session => session.id !== channel.agentId)
-              setResumeSessions(pickable)
-              if (pickable.length === 0) {
-                setResumePickerOpen(false)
-              } else {
-                setResumeIndex(index => Math.min(index, pickable.length - 1))
-              }
-            })()
-          }
-        } else if (key.escape) {
-          setResumeMode('list')
-        }
-        return
-      }
-      if (resumeMode === 'rename') {
-        if (plainReturn) {
-          setResumeMode('list')
-          const title = resumeRenameText.trim()
-          // oxlint-disable-next-line typescript/no-unnecessary-condition -- runtime guard: out-of-range index on an empty list
-          if (resumeSession && title.length > 0) {
-            const target = resumeSession
-            void (async () => {
-              const ok = await channel.renameSessionTo(target.id, title)
-              if (!ok) {
-                channel.notify(t('resume-rename-failed', { name: target.title || target.id }), { color: 'error' })
-                return
-              }
-              channel.notify(t('rename-done', { title }))
-              // Re-list so the row reflects the persisted state, but patch
-              // the renamed row's title explicitly: listSessions resolves
-              // persisted titles only within the MRU top SESSION_TITLE_DEPTH
-              // window, and a freshly renamed row must never snap back to
-              // the basename fallback in between.
-              const sessions = await channel.listSessions()
-              const next = sessions
-                .filter(session => session.id !== channel.agentId)
-                .map(session => (session.id === target.id ? { ...session, title } : session))
-              setResumeSessions(next)
-              // Re-anchor focus on the renamed row: renameSessionTo touches
-              // MRU, so the re-listed order shifts — a kept index would
-              // silently point at a DIFFERENT session, and a following
-              // Enter/ctrl+d would act on the wrong one (review leftover).
-              const anchored = next.findIndex(session => session.id === target.id)
-              if (anchored >= 0) setResumeIndex(anchored)
-            })()
-          }
-        } else if (key.escape) {
-          setResumeMode('list')
-        } else if (key.backspace) {
-          setResumeRenameText(text => text.slice(0, -1))
-        } else if (!key.ctrl && !key.meta && !key.super && input) {
-          // Single-line title: pasted newlines collapse to spaces.
-          setResumeRenameText(text => text + input.replace(/[\r\n]+/g, ' '))
-        }
-        return
-      }
-      if (key.upArrow) {
-        setResumeIndex(index => (index <= 0 ? resumeSessions.length - 1 : index - 1))
-      } else if (key.downArrow) {
-        setResumeIndex(index => (index >= resumeSessions.length - 1 ? 0 : index + 1))
-      } else if (plainReturn) {
-        // oxlint-disable-next-line typescript/no-unnecessary-condition -- runtime guard: out-of-range index on an empty list
-        if (resumeSession) {
-          // Enter switches the live agent to the persisted session right
-          // away (the history replays into the transcript); the resume.txt
-          // launcher marker is refreshed by resumeTo so `--resume` on the
-          // next launch opens the same session.
-          setResumePickerOpen(false)
-          void channel.resumeTo(resumeSession.id).then((ok) => {
-            if (ok) channel.notify(t('resume-resumed'))
-          })
-        } else {
-          setResumePickerOpen(false)
-        }
-      } else if (key.escape) {
-        setResumePickerOpen(false)
-      } else if (isMod(key) && input === 'd' && resumeSession) {
-        setResumeMode('confirm-delete')
-      } else if (isMod(key) && input === 'r' && resumeSession) {
-        setResumeRenameText(resumeSession.title || '')
-        setResumeMode('rename')
-      }
-      return
-    }
     if (modelPickerOpen) {
       if (key.upArrow) {
         setModelIndex(index => (index <= 0 ? models.length - 1 : index - 1))
@@ -1689,49 +1657,14 @@ export function Chat({
       }
       return
     }
-    if (traceOpen) {
-      // Trajectory view (issue #80): read-only timeline navigation. ↑/↓ and
-      // PgUp/PgDn move the cursor (any upward move unpins tail-following,
-      // landing back on the newest entry re-pins it); g/G jump top/bottom;
-      // `f` cycles the type filter (all → tool → thinking → message →
-      // progress); Esc/q closes back to the conversation.
-      const last = traceEntries.length - 1
-      const letter = input !== '' && !key.ctrl && !key.meta
-      if (key.escape || (letter && input === 'q')) {
-        setTraceOpen(false)
-      } else if (key.upArrow) {
-        traceFollowRef.current = false
-        setTraceCursor(Math.max(0, traceCursorClamped - 1))
-      } else if (key.downArrow) {
-        const next = Math.min(last, traceCursorClamped + 1)
-        setTraceCursor(next)
-        traceFollowRef.current = next >= last
-      } else if (key.pageUp) {
-        traceFollowRef.current = false
-        setTraceCursor(Math.max(0, traceCursorClamped - TRACE_WINDOW))
-      } else if (key.pageDown) {
-        const next = Math.min(last, traceCursorClamped + TRACE_WINDOW)
-        setTraceCursor(next)
-        traceFollowRef.current = next >= last
-      } else if (key.home || (letter && input === 'g')) {
-        traceFollowRef.current = false
-        setTraceCursor(0)
-      } else if (key.end || (letter && input === 'G')) {
-        traceFollowRef.current = true
-        setTraceCursor(Math.max(0, last))
-      } else if (letter && input === 'f') {
-        const index = TRACE_FILTERS.indexOf(traceFilter)
-        setTraceFilter(TRACE_FILTERS[(index + 1) % TRACE_FILTERS.length] ?? 'all')
-        // The filtered list re-anchors to the newest entry.
-        traceFollowRef.current = true
-        setTraceCursor(0)
-      }
-      return
-    }
     if (isMod(key) && input === 't') {
-      // Toggle the startup loaded-context panel (keyboard only — the
-      // ported ink core handles no mouse clicks).
-      setLoadedContextOpen(previous => !previous)
+      // Ctrl+T opens the trajectory scene (issue #80 evolution). It used to
+      // toggle the startup loaded-context panel — which only ever renders
+      // before the first message (see the render below), so the binding was
+      // dead for the whole rest of a session. The panel keeps its header
+      // click-to-toggle; the key now has a meaning that always applies.
+      openScene()
+      return
     }
     if (isMod(key) && input === 'r' && !helpOpen) {
       setHistoryQuery('')
@@ -1811,12 +1744,42 @@ export function Chat({
   // Working-activity line (spinner slot): context-pressure prefix shares the
   // StatusLine thresholds (amber ≥ 80, red ≥ 95).
   const activityWarnPct = contextPressurePct(channel.lastUsage, channel.contextWindow)
+  // The browser is a screen, not an overlay: it REPLACES the conversation
+  // rather than floating above it. Rendering it as an early return (after
+  // every hook above has run) is what makes that literal — there is no
+  // transcript underneath to be repainted, scrolled, or bled through.
+  if (browserOpen) {
+    const browser = (
+      <SessionBrowser
+        channel={channel}
+        home={homeDir()}
+        sameProject={sessionCwdMatches}
+        onClose={() => setBrowserOpen(false)}
+      />
+    )
+    // Inline hosts enter the alternate screen for the duration; full-screen
+    // hosts are already in it and must not nest a second one.
+    return fullscreen ? browser : <AlternateScreen>{browser}</AlternateScreen>
+  }
+
   /** Prompt input is inert while a modal dialog owns the keyboard. */
   const promptSelectionActive =
-    selectionActive || modelPickerOpen || resumePickerOpen || workspacePickerOpen || workspaceFlow !== null || activityPickerOpen ||
+    selectionActive || modelPickerOpen || workspacePickerOpen || workspaceFlow !== null || activityPickerOpen ||
     effortSliderOpen || presetPickerOpen || themePickerOpen || thinkingOpen || historyOpen || rewindOpen || searchOpen ||
-    btw !== null ||
-    traceOpen
+    btw !== null
+
+  // The trajectory scene replaces the conversation for as long as it is open.
+  // Rendering it INSTEAD of (not above) the transcript is what makes it a
+  // screen rather than an overlay: it owns the full viewport, and the
+  // conversation's own frame is never resized while it is up. Chat stays
+  // mounted, so every hook above has already run and no state is lost.
+  // `<AlternateScreen>` is skipped when the app is already fullscreen —
+  // nesting it would emit a second DEC 1049, and its unmount would drop the
+  // whole app back to the main screen.
+  if (sceneOpen) {
+    const scene = <TrajectoryScene channel={channel} build={trajectory} onClose={closeScene} />
+    return fullscreen ? scene : <AlternateScreen>{scene}</AlternateScreen>
+  }
 
   // 浮层整体挂载条件：必须与内部各面板的可见条件精确同值。关闭时把
   // 整个 absolute 浮层从树里移除——渲染器的"移除 absolute 节点"检测只看
@@ -1825,13 +1788,13 @@ export function Chat({
   // blit-skip 后留空（Esc 关 picker 一片空白的根因）。
   const dialogOverlayOpen =
     thinkingOpen || (workspacePickerOpen && workspaceTargets.length > 0) || workspaceFlow !== null ||
-    (resumePickerOpen && resumeSessions.length > 0) || modelPickerOpen ||
+    modelPickerOpen ||
     activityPickerOpen || (effortSliderOpen && effortOptions.length > 1) ||
     (presetPickerOpen && presetOptions.length > 0) || themePickerOpen || historyOpen ||
-    rewindOpen || traceOpen || searchOpen
+    rewindOpen || searchOpen
 
   return (
-    <Box flexDirection="column" flexGrow={1} width="100%">
+    <Box ref={wakeTickRef} flexDirection="column" flexGrow={1} width="100%">
       {!isSticky && channel.lastUserText && (
         <StickyPromptHeader
           text={channel.lastUserText}
@@ -1862,6 +1825,8 @@ export function Chat({
         )}
         <MessageList
           rows={channel.rows}
+          failureHintRowId={failureHintRowId}
+          failureHint={t('traj-hint-failure', { key: `${modLabel}t` })}
           expanded={expanded}
           expandedRows={expandedRows}
           selectedId={selectionActive ? selectedId : null}
@@ -1969,6 +1934,15 @@ export function Chat({
           channel={channel}
           selectionActive={selectionActive}
           helpOpen={helpOpen}
+          wake={
+            wakeBand === undefined
+              ? undefined
+              : {
+                  band: wakeBand,
+                  hint: trajectorySeen ? undefined : `${modLabel}t`,
+                  tick: Math.floor(wakeTime / 120),
+                }
+          }
         />
         {/* 瞬态面板浮层：absolute + bottom:'100%' 钉在本 chrome Box 顶边，向上
             覆盖转录尾部行，自身零布局高度。in-flow 挂载会让帧高随面板开关涨落，
@@ -2001,17 +1975,6 @@ export function Chat({
                 focusIndex={workspaceFlowIndex}
                 busy={workspaceFlowBusy}
                 input={workspaceFlowInput}
-              />
-            </Box>
-          )}
-          {resumePickerOpen && resumeSessions.length > 0 && (
-            <Box flexDirection="column" marginTop={1}>
-              <ResumePicker
-                sessions={resumeSessions}
-                focusIndex={resumeIndex}
-                currentSessionId={channel.agentId}
-                mode={resumeMode}
-                renameText={resumeRenameText}
               />
             </Box>
           )}
@@ -2075,15 +2038,6 @@ export function Chat({
                 rows={rewindRows}
                 focusIndex={rewindIndex}
                 confirmRow={rewindConfirm}
-              />
-            </Box>
-          )}
-          {traceOpen && (
-            <Box flexDirection="column" marginTop={1}>
-              <TraceView
-                entries={traceEntries}
-                cursor={traceCursorClamped}
-                filter={traceFilter}
               />
             </Box>
           )}

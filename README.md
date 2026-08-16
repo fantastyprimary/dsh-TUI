@@ -77,7 +77,8 @@ sh install.sh
 `dsh-tui --resume` 恢复上次会话；Windows 也可用仓库里的 `dsh-tui.cmd`（等价）。
 
 在 VS Code 中运行的完整指南（内置终端直接使用 + companion 扩展
-`dsh-tui-vscode` 一键启动/恢复与编辑器集成）见
+`dsh-tui-vscode`——**真实集成终端承载、体验与 Claude Code 官方扩展几乎一致、
+已上架 VS Code Marketplace**）见
 [在 VS Code 中运行 dsh-TUI](docs/vscode.md)。
 
 TUI 启动后会在后台检查 npm 是否有新版本；发现更新时会提示，输入 `/update`
@@ -134,7 +135,7 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 
 | 分组 | 命令 |
 |---|---|
-| 会话 | `/new` 新会话 · `/resume` 切换当前工作区内的会话 · `/rename` 重命名会话 · `/workspace resume|rename|open` 管理工作区 · `/clear` 清屏 · `/compact` 压缩 · `/export` 导出 Markdown · `/trace` 轨迹时间线 |
+| 会话 | `/new` 新会话 · `/resume` 会话浏览器（搜索、预览、跨项目、折叠子 agent 运行） · `/rename` 重命名会话 · `/workspace resume|rename|open` 管理工作区 · `/clear` 清屏 · `/compact` 压缩 · `/export` 导出 Markdown · `/trace` 轨迹场景（亦可 `Ctrl+T`） |
 | 状态 | `/status` 会话信息 · `/cost` token 用量 · `/doctor` 环境自检 · `/config` 配置来源 · `/init` 创建 AGENTS.md |
 | 模型/Agent | `/model` 选择器 · `/preset` 官方预设 · `/smart` 路由增强 · `/force-smart` 锚定增强 · `/thinking` 思考显示 · `/tokens` token 明细 · `/theme` 主题选择器 · `/lang` 中英界面切换 |
 | 账号/策略 | `/provider` 添加模型提供方 · `/login` 凭证状态 · `/logout` 登出说明 · `/permissions` 权限说明 · `/add-dir` 文件策略范围 · `/hooks` · `/mcp` · `/memory` |
@@ -151,7 +152,7 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 | [主题系统](docs/themes.md) | 内置主题、自动检测、自定义 JSON 主题与校验规则 |
 | [交互与命令](docs/interaction.md) | 快捷键、鼠标、问卷、slash command 与会话工作流 |
 | [架构与限制](docs/architecture.md) | 运行链路、渲染与持久化设计、安全边界、已知限制 |
-| [VS Code 使用指南](docs/vscode.md) | 在 VS Code 集成终端运行 dsh-tui 与 companion 扩展 `dsh-tui-vscode` |
+| [VS Code 使用指南](docs/vscode.md) | 在 VS Code 集成终端运行 dsh-tui；companion 扩展 `dsh-tui-vscode` 提供与 Claude Code 官方扩展几乎一致的体验（已上架 Marketplace） |
 | [贡献与开发约定](docs/contributing.md) | 贡献流程、仓库地图、构建产物、验证矩阵与修改规则 |
 | [插件开发指南](docs/plugins.md) | 插件接缝（会话事件 / 槽位 / 技能 / 主题 / prompt 段）、契约、规范与收录 |
 
@@ -159,13 +160,14 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 
 ## 配置与扩展
 
-- **Agent preset 与智能增强**：四种官方 Agent 模式仍由 `/preset` 选择；`/smart`
+ - **Agent preset 与智能增强**：四种官方 Agent 模式以及 TUI 随包提供的
+  `liangshen`（梁神模式）由 `/preset` 选择；`/smart`
   叠加基于 `dsh-routing-suite` 的 Smart，`/force-smart` 叠加面向 DeepSeek V4 Pro
   调校的 ForceSmart Anchored 控制器。两者互斥，开启一个会用一次完整 session fork
   自动关闭另一个；prompt、context、工具、route、工作目录和历史会重新组装，不会向
-  官方 preset 名册加入第五种模式。Smart 内部按模型选择 Router Standard/Router Pro；
-  Smart 与 ForceSmart 的首轮控制都参考 Anchored；ForceSmart 是其增强的唯一产品名，
-  固定提交中的“梁神模式”仅为机制来源，不作为别名或界面名称。Smart 在 Windows
+  preset 名册加入额外模式。上游 `liangshen` 是可直接选择的独立 preset；ForceSmart
+  是叠加在当前 base preset 上的增强，两者不是别名。Smart 内部按模型选择 Router
+  Standard/Router Pro；Smart 与 ForceSmart 的首轮控制都参考 Anchored。Smart 在 Windows
   使用 `pwsh`、在 WSL2/Linux/macOS 使用 `bash`；ForceSmart 在原生 Windows 用真实
   Git Bash 完成 Minimal 双工具首轮并在晋升后恢复 `pwsh`，其他三类环境使用官方
   persistent Bash。
@@ -255,8 +257,9 @@ pnpm build
 pnpm smoke
 ```
 
-`pnpm build` 会把 `src/` 编译到已提交的 `lib/types/`。修改源码时必须同步生成产物；
-渲染、问卷和工具卡还需运行对应回归脚本。
+`lib/types/` 是忽略入库的生成目录；`pnpm build` 会从干净输出目录重新编译并运行
+构建门禁。npm Git URL 安装通过 `prepare` 生成同一套运行时。渲染、问卷和工具卡
+改动还需运行对应回归脚本。
 
 ## 插件生态
 

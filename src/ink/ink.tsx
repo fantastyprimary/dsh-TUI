@@ -318,6 +318,16 @@ export default class Ink {
     this.terminalRows = rows;
     this.altScreenParkPatch = makeAltScreenParkPatch(this.terminalRows);
 
+    // Every cached measurement in the tree was taken against a width that no
+    // longer exists. Nothing here is "dirty" in the reconciler's sense — no
+    // props changed — so without an explicit sweep the text nodes keep
+    // answering with the sizes they computed for the old terminal, and the
+    // rows that depend on flex arbitration come out assembled from two
+    // different layouts. Setting the root's width alone does not reach them:
+    // markDirty walks upward from a changed node, and here the change is the
+    // constraint every node was measured against.
+    dom.markTreeDirty(this.rootNode);
+
     // Alt screen: reset frame buffers so the next render repaints from
     // scratch (prevFrameContaminated → every cell written, wrapped in
     // BSU/ESU — old content stays visible until the new frame swaps

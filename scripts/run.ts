@@ -39,7 +39,9 @@ import {
 import type { Context } from '@deepseek-ai/cordis'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
-const workspace = resolve(here, '../../../..')
+// Default assumes an in-monorepo checkout (harness/packages/ui/dsh-tui);
+// standalone clones set DSH_TUI_DEV_WORKSPACE to the harness repo root.
+const workspace = process.env.DSH_TUI_DEV_WORKSPACE ?? resolve(here, '../../../..')
 const dshHome = process.env.DSH_HOME
 const profileDir = join(dshHome, 'profiles', 'dsh-tui')
 const rootConfig = join(profileDir, 'cordis.yml')
@@ -184,9 +186,15 @@ if (existsSync(profilesNm)) {
 const basePatchPath = resolve(workspace, 'packages/bundle/base/cordis.patch.yml')
 const basePatches: PatchOptions[] = loadOverlayPatches('dsh', basePatchPath)
 
-// 2. dsh-working-activity: inserts the working-activity row.
+// 2. dsh-working-activity: inserts the working-activity row — SKIPPED when
+// dsh-tui's own patch already carries the row (current cordis.patch.yml
+// re-exports ./working-activity itself; loading both layers is a duplicate
+// loader entry id). Kept for older patch stacks.
 const activityPatchPath = resolve(workspace, 'packages/activity/working-activity/cordis.patch.yml')
-const activityPatches: PatchOptions[] = loadOverlayPatches('dsh', activityPatchPath)
+const tuiPatchText = readFileSync(resolve(workspace, 'packages/ui/dsh-tui/cordis.patch.yml'), 'utf8')
+const activityPatches: PatchOptions[] = tuiPatchText.includes('id: working-activity')
+  ? []
+  : loadOverlayPatches('dsh', activityPatchPath)
 
 // 3. External plugin bundles (dsh-vision, dsh-pi-adapter, etc.):
 //    loaded before dsh-tui so dsh-tui's overrides take precedence.

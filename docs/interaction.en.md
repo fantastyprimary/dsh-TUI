@@ -19,7 +19,7 @@
 | `Ctrl+C` | Interrupt while working; clear non-empty idle input; press twice on empty input to exit |
 | `Ctrl+D` | Press twice while idle to exit |
 | `Ctrl+O` | Toggle transcript/verbose detail, including full reasoning and tool arguments/output |
-| `Ctrl+T` | Expand or collapse the startup loaded-context panel |
+| `Ctrl+T` | Open the trajectory scene (same as `/trace`); `q`/`Esc` returns to the conversation |
 | `Ctrl+R` | Open input-history search; repeat or press `Down` for the next result |
 | `Ctrl+L` | Clear and force a physical terminal redraw |
 | `?` | Open shortcut and command help when the input is empty |
@@ -80,9 +80,42 @@ redelivers them immediately.
 
 ### Resume
 
-`/resume` lists recent resumable sessions for the current working directory.
-Titles come from the first user message, and entries are ordered by most recent
-use. Confirming switches the Agent and replays persisted events.
+`/resume` opens the session browser — a full screen, not a floating panel. It
+lists the conversations in the current working directory, most recently active
+first; confirming switches the Agent and replays persisted events.
+
+The browser shows **conversations** only. Sub-agent runs the model delegated to
+itself are persisted as sessions too (the session header records
+`origin: 'subagent'`); they are folded away by default, counted in the header,
+and revealed as indented rows under their parent with `ctrl+s`. Rewound
+branches from `/rewind` are unaffected — those record `parentSession` without
+`origin`, and they are the user's own conversations. Sessions that recorded
+only their boot policy and hold no conversation are never listed, only counted,
+with `ctrl+x` to clear them (scoped to the current list, never across
+projects).
+
+| Key | Action |
+| --- | --- |
+| Type | Live search over titles, directories, branches, models |
+| `↑` `↓` / `PgUp` `PgDn` | Move, page |
+| `Enter` | Resume the selected session |
+| `Tab` | Preview that session's last few exchanges |
+| `ctrl+a` | Toggle this project / all projects (grouped by directory) |
+| `ctrl+b` | Only sessions last used on the current branch |
+| `ctrl+s` | Expand / fold sub-agent runs |
+| `ctrl+r` / `ctrl+d` | Rename / delete the selected session |
+| `ctrl+x` | Remove sessions that hold no conversation |
+| `Esc` | Clear the search first, leave second |
+
+Each row carries the title, last activity, the git branch this install was on
+when it last used the session, the log size, and the model. Titles are graded
+by evidence: a `/rename`, an automatically generated title, an excerpt of the
+opening prompt, or — when none of those can be read — the directory name,
+which is dimmed to say it is not really a name.
+
+The list reads only bounded windows at each end of a session log and caches the
+result against the persistence layer's own change token, so opening it costs
+the same regardless of how long the history is or how large a session got.
 
 On Windows, `dsh-tui.cmd --resume` uses the session ID last written to
 `~/.dsh-tui/resume.txt` (also dual-written to the old path
@@ -221,7 +254,7 @@ zh; unmapped registry commands fall back to the registry's own text.
 
 | Group | Commands |
 | --- | --- |
-| Sessions | `/new`, `/resume`, `/rename`, `/workspace resume|rename|open`, `/clear`, `/compact`, `/export`, `/btw`, `/trace` |
+| Sessions | `/new`, `/resume`, `/rename`, `/workspace resume|rename|open`, `/clear`, `/compact`, `/export`, `/btw`, `/trace` (trajectory scene, also `Ctrl+T`) |
 | Status | `/status`, `/cost`, `/config`, `/doctor`, `/init`, `/agents` |
 | Model and display | `/model`, `/effort`, `/thinking`, `/tokens`, `/activity`, `/preset`, `/theme`, `/lang` |
 | Account and policy | `/provider`, `/login`, `/logout`, `/permissions`, `/add-dir`, `/hooks`, `/mcp`, `/memory` |

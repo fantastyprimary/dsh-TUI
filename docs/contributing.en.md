@@ -69,10 +69,9 @@ boundaries and helpers over introducing parallel abstractions.
 - `cordis.yml`: full bare-composition example for direct Cordis/DSH startup.
 - `scripts/`: headless regressions, reproduction harnesses, probes, and
   diagnostics. Read each script's header before running it.
-- `lib/types/`: checked-in output from `tsc` (JavaScript, declarations, and
-  declaration maps). It is generated from `src/` and ships to npm.
-- `lib/invariant.js`: separate bundled runtime export for `./invariant`; the
-  normal `pnpm build` does not regenerate this file.
+- `lib/`: ignored JavaScript, declarations, and declaration maps generated from
+  `src/` and shipped to npm. `./invariant` uses the compiled
+  `lib/types/dsh-adapter/invariant.js` entry as well.
 - `README.md` and `README_EN.md`: Chinese and English user documentation. Keep
   behavior, configuration, shortcuts, and limitations synchronized between
   them.
@@ -120,13 +119,11 @@ seam.
   pnpm install --frozen-lockfile
   ```
 
-- `pnpm-lock.yaml` is the CI lockfile. `package-lock.json` is tracked for npm
-  consumers but currently trails the package version; do not use it as the
-  dependency source of truth or rewrite it opportunistically.
-- When intentionally changing dependencies, update `pnpm-lock.yaml`, inspect
-  the full lockfile diff, and avoid unrelated upgrades. Touch
-  `package-lock.json` only when the task explicitly includes npm-install
-  compatibility.
+- `pnpm-lock.yaml` is the single lockfile. npm consumers do not read a
+  dependency's lockfile, so `package-lock.json` has been removed (follow-up of
+  #173).
+- When intentionally changing dependencies, update `pnpm-lock.yaml` with
+  `pnpm add`, inspect the full lockfile diff, and avoid unrelated upgrades.
 - `@deepseek-ai/cordis` and `@deepseek-ai/dsh-invariants` are both peer and dev
   dependencies so the package can type-check locally. Keep those declarations
   compatible when changing their versions.
@@ -142,23 +139,28 @@ The normal build and type-check gate is:
 pnpm build
 ```
 
-This runs `tsc -p tsconfig.json` and emits `src/` into `lib/types/`. The project
-commits these artifacts because the published package executes them.
+This removes the complete `lib/` directory, runs `tsc -p tsconfig.json` to emit
+`src/` into `lib/types/`, and then checks the adapter boundary, upstream
+contract, and patch surface. The `prepare` lifecycle performs only the clean
+compilation so npm Git URL installs produce a runnable package without
+checked-in output. Local and CI workflows use explicit commands instead of
+depending on whether pnpm implicitly runs the root lifecycle.
 
 Rules for generated output:
 
-- Edit `src/`, never `lib/types/`, to implement behavior.
-- After any source change, run `pnpm build` and include the corresponding
-  `lib/types/` JavaScript, `.d.ts`, and `.d.ts.map` changes.
-- `tsc` does not clean `outDir`. After renaming or deleting a source module,
-  inspect `lib/types/` and remove only the stale outputs for that module.
-- Review generated diffs. Unexpected changes usually indicate an accidental
-  compiler/configuration or dependency shift.
+- Edit `src/`, never `lib/`, to implement behavior.
+- After any source change, run `pnpm build`, but do not commit generated files
+  from `lib/`.
+- Clean compilation removes the complete `lib/` first, so renamed or deleted
+  source modules cannot leave stale output behind.
+- Run `pnpm verify:package` to ensure every `main`, `types`, `bin`, and `exports`
+  target is present in the npm tarball and to smoke-import the main and
+  invariant entries.
 - Documentation-only, workflow-only, and YAML-only changes do not require a
   rebuild unless they also alter TypeScript inputs.
-- `lib/invariant.js` is not produced by `pnpm build`. If `src/invariant.ts` or
-  the `./invariant` export contract changes, explicitly keep the bundled file
-  and `lib/types/invariant.d.ts` aligned and verify the package export.
+- Git URL installation with `--ignore-scripts` skips `prepare` and is therefore
+  unsupported. Registry packages already contain compiled output and do not
+  depend on lifecycle scripts running on the consumer's machine.
 
 `scripts/build.sh` is an alternate builder for a local DeepSeek Harness source
 checkout. It locates a DSH checkout and rewires dependencies to that checkout.
@@ -173,7 +175,10 @@ regressions.
 CI runs these commands after installation:
 
 ```sh
-pnpm build
+pnpm compile                               # generate a clean runtime
+test -f lib/types/index.js
+pnpm verify:build                          # build gates without recompiling
+pnpm verify:package                        # npm tarball and entry smoke test
 node --import tsx/esm scripts/repro-askpanel.tsx
 node --import tsx/esm scripts/verify-askpanel-layout.tsx
 node --import tsx/esm scripts/repro-toolcards.tsx

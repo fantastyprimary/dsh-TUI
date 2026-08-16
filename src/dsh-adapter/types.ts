@@ -14,3 +14,24 @@ export type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-app
 export type { AgentSetup } from '@deepseek-ai/dsh-agent'
 export type { Context } from '@deepseek-ai/cordis'
 export type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
+
+/**
+ * Trajectory projection types. Not upstream types, but the same rule applies:
+ * the scene is pure UI over this shape and never reaches into the projection's
+ * own modules (which do import `@deepseek-ai/*`).
+ */
+export type {
+  HotspotRow,
+  HotspotSort,
+  TrajAggregate,
+  TrajBurst,
+  TrajKind,
+  TrajNode,
+  TrajStatus,
+  TrajTokens,
+  TrajTotals,
+  WaveBand,
+  WaveBucket,
+  WaveChannel,
+  WaveProjection,
+} from './trajectory/types.js'

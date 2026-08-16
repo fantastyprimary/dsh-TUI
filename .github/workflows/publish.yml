@@ -14,6 +14,9 @@ permissions:
 jobs:
   npm:
     runs-on: ubuntu-latest
+    env:
+      # Gate scripts assert zh UI copy (same convention as CI).
+      DSH_TUI_LANG: zh
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +32,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm build
+      - run: pnpm compile
+
+      - name: Verify clean compile output
+        run: |
+          test -f lib/types/index.js
+          test -f lib/types/dsh-adapter/invariant.js
+
+      - run: pnpm verify:build
+
+      - run: pnpm verify:package
 
       # 标签与 package.json version 不一致直接失败，防止发错版本。
       - name: Check tag matches package version

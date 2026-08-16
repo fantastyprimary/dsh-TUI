@@ -182,9 +182,10 @@ pnpm build
 pnpm smoke
 ```
 
-`pnpm build` runs `tsc -p tsconfig.json` and emits `src/` into `lib/types/`.
-Those generated files are committed and published, so source changes must be
-followed by a rebuild.
+`pnpm build` cleans the ignored `lib/` directory, compiles `src/` into
+`lib/types/`, and runs the build gates. npm Git URL installs generate the same
+runtime through `prepare`; the publish workflow also performs an explicit clean
+compilation and package-surface check before packing.
 
 CI also runs three rendering regressions:
 

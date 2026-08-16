@@ -597,9 +597,27 @@ function fullResetSequence_CAUSES_FLICKER(
   stylePool: StylePool,
   debug?: { triggerY: number; prevLine: string; nextLine: string },
 ): Diff {
-  // After clearTerminal, cursor is at (0, 0)
-  const screen = new VirtualScreen({ x: 0, y: 0 }, frame.viewport.width)
-  renderFrame(screen, frame, stylePool)
+  // After clearTerminal the viewport is blank and the cursor is at (0, 0), so
+  // this paints downward from the top — and therefore must paint only what
+  // fits. Every row here ends in CR+LF, the bottom viewport row is reserved
+  // for the cursor park, and so at most viewportHeight-1 rows of content can
+  // land above it. Painting the whole frame regardless overflows as soon as
+  // the frame is as tall as the viewport: the trailing CR+LF is emitted on the
+  // bottom row, the terminal scrolls, and the frame's last row — the status
+  // hint, always the final row of the main screen — is carried off the bottom.
+  // A narrowing resize is what makes a frame reach full height (content wraps
+  // onto more rows while the row count stays put), which is why that direction
+  // lost its bottom row while widening never did.
+  //
+  // Painting the frame's tail instead keeps the same end state the in-place
+  // viewport repaint documents — frame rows [H-contentRows, H) on screen with
+  // the cursor parked one row below the last of them — so the next frame's
+  // bookkeeping needs no special case for having come through a reset.
+  const height = frame.screen.height
+  const contentRows = Math.min(height, Math.max(1, frame.viewport.height - 1))
+  const startY = height - contentRows
+  const screen = new VirtualScreen({ x: 0, y: startY }, frame.viewport.width)
+  renderFrameSlice(screen, frame, startY, height, stylePool)
   return [{ type: 'clearTerminal', reason, debug }, ...screen.diff]
 }
 
@@ -656,14 +674,6 @@ function repaintViewportInPlace(
   const screen = new VirtualScreen({ x: 0, y: startY }, next.viewport.width)
   renderFrameSlice(screen, next, startY, height, stylePool)
   return [{ type: 'stdout', content: anchor }, ...screen.diff]
-}
-
-function renderFrame(
-  screen: VirtualScreen,
-  frame: Frame,
-  stylePool: StylePool,
-): void {
-  renderFrameSlice(screen, frame, 0, frame.screen.height, stylePool)
 }
 
 /**

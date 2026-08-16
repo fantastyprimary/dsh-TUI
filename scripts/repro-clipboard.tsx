@@ -11,6 +11,9 @@
  * Linux-only: stubs the wl-paste backend via PATH.
  */
 process.env.FORCE_COLOR = '3'
+// This script asserts English UI copy ('? for this help'); pin the
+// language before any module import resolves the startup lang.
+process.env.DSH_TUI_LANG = 'en'
 
 const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render, AlternateScreen }, { Chat }, { QuestionStore }, { mkdtempSync, writeFileSync, rmSync }, { tmpdir }, { join }] = await Promise.all([
   import('node:stream'),

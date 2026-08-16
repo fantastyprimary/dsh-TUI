@@ -7,6 +7,8 @@ import { KeyboardShortcutHint } from '../components/design-system/KeyboardShortc
 import { ActivityLine, contextPressurePct } from '../components/ActivityLine.js'
 import type { Channel } from '../dsh-adapter/channel.js'
 import { modeDisplayName } from '../sessionModes.js'
+import { MiniWake } from '../components/trajectory/MiniWake.js'
+import type { WaveBand } from '../dsh-adapter/types.js'
 import {
   renderContextBar,
   renderTpsGauge,
@@ -26,10 +28,21 @@ export function StatusLine({
   channel,
   selectionActive = false,
   helpOpen = false,
+  wake,
 }: {
   channel: Channel
   selectionActive?: boolean
   helpOpen?: boolean
+  /**
+   * The session projected onto the status line's few columns, plus the
+   * animation tick and the self-retiring key hint.
+   *
+   * A strip that shows the session's shape keeps earning its space in a way a
+   * static label cannot, and it carries the failure signal in position rather
+   * than as a count in the corner. Absent in headless embeds, where nothing
+   * folds the event log.
+   */
+  wake?: { band: WaveBand; hint?: string; tick: number }
 }) {
   const { columns } = useTerminalSize()
   const [themeName] = useTheme()
@@ -188,7 +201,17 @@ export function StatusLine({
   }
 
   return (
-    <Box paddingX={2}>
+    // Width is pinned to the terminal rather than inherited: `width="100%"`
+    // resolves against the *parent's* width, and the bottom chrome this sits
+    // in is sized by cross-axis stretch, not by a definite value. Where that
+    // resolution comes back indefinite the column falls to content width — the
+    // context bar (a string sized from `columns`) still spans the terminal
+    // while the two flex rows under it stop short, truncating the session
+    // title mid-word and leaving the right-aligned wake stranded mid-line.
+    // Taking the width from the same source the bar already uses makes the
+    // three rows agree by construction. verify-trace-scene part D walks a
+    // ladder of widths and asserts the wake reaches the right margin at each.
+    <Box paddingX={2} width={columns} flexShrink={0}>
       <Box flexDirection="column" width="100%">
         {/* Row 1: segmented context bar, its own line, first (pi-nano-context
             placement — the bar sits directly under the transcript). */}
@@ -230,6 +253,9 @@ export function StatusLine({
             <Text color="inactiveShimmer" wrap="truncate">
               {hint}
             </Text>
+          ) : null}
+          {wake !== undefined ? (
+            <MiniWake band={wake.band} hint={wake.hint} tick={wake.tick} />
           ) : null}
         </Box>
       </Box>

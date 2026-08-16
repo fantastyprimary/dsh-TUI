@@ -1,5 +1,6 @@
 import React from 'react'
 import { t as tr } from '../i18n.js'
+import { modLabel } from '../utils/modifiers.js'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -144,6 +145,8 @@ export function LogoV2({
             <Text dimColor> {tr('logo-tip-model')} · </Text>
             /help
             <Text dimColor> {tr('logo-tip-help')} · </Text>
+            {`${modLabel}t`}
+            <Text dimColor> {tr('logo-tip-trace')} · </Text>
             Tab
             <Text dimColor> {tr('logo-tip-tab')}</Text>
           </Text>

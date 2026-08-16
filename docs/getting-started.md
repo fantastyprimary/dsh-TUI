@@ -176,8 +176,9 @@ pnpm build
 pnpm smoke
 ```
 
-`pnpm build` 执行 `tsc -p tsconfig.json`，把 `src/` 编译到 `lib/types/`。
-`lib/types/` 是提交并发布的产物；源码改动必须同步重建。
+`pnpm build` 会清理忽略入库的 `lib/`，把 `src/` 编译到 `lib/types/`，再运行
+构建门禁。npm Git URL 安装通过 `prepare` 生成同一套运行时；发布 workflow
+也会在打包前显式执行干净编译和包面验证。
 
 CI 还会运行三条渲染回归：
 

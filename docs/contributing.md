@@ -55,10 +55,8 @@ DeepSeek Harness 拥有，TUI 只消费它们。
   被禁用的 host 行、insert/override 语义都很关键。
 - `cordis.yml`：直接 Cordis/DSH 启动的完整裸组合示例。
 - `scripts/`：无头回归、复现环境、探针与诊断。运行前先读脚本头部说明。
-- `lib/types/`：`tsc` 的入库产物（JavaScript、声明与声明映射），由 `src/`
-  生成并随 npm 分发。
-- `lib/invariant.js`：`./invariant` 的独立打包运行时导出；普通 `pnpm build`
-  不会重新生成它。
+- `lib/`：由 `src/` 生成、忽略入库并随 npm 分发的 JavaScript、声明与声明映射。
+  `./invariant` 也直接使用 `lib/types/dsh-adapter/invariant.js` 的编译结果。
 - `README.md` 与 `README_EN.md`：中英文用户文档。行为、配置、快捷键与限制
   必须两版同步。
 
@@ -96,10 +94,10 @@ Cordis config
 - 支持 Node `^22.19 || >=24`；CI 用 Node 24。
 - CI 与发布用 pnpm 11；开发也请用 pnpm。
 - 干净检出安装：`pnpm install --frozen-lockfile`。
-- `pnpm-lock.yaml` 是 CI 锁文件。`package-lock.json` 为 npm 用户跟踪但当前
-  落后于包版本；不要把它当作依赖真源，也不要顺手改写。
-- 有意改依赖时：更新 `pnpm-lock.yaml`，检查完整 lockfile diff，避免无关升级。
-  只有任务明确包含 npm-install 兼容性时才动 `package-lock.json`。
+- `pnpm-lock.yaml` 是唯一锁文件。npm 消费方不读依赖包的 lockfile，
+  `package-lock.json` 已移除（见 #173 后续处理）。
+- 有意改依赖时：用 `pnpm add` 更新 `pnpm-lock.yaml`，检查完整 lockfile diff，
+  避免无关升级。
 - `@deepseek-ai/cordis` 与 `@deepseek-ai/dsh-invariants` 同时是 peer 与 dev
   依赖，便于本地类型检查；改版本时保持这两组声明兼容。
 - 不要暴露、持久化或打印凭证。交互启动读取 `DEEPSEEK_API_KEY`；诊断可以
@@ -107,21 +105,22 @@ Cordis config
 
 ## 构建与生成产物（Build And Generated Files）
 
-常规构建与类型检查关口：`pnpm build`（`tsc -p tsconfig.json`，把 `src/` 输出
-到 `lib/types/`）。仓库提交这些产物，因为发布的包直接执行它们。
+常规构建与类型检查关口：`pnpm build`。该命令先删除整个 `lib/`，再用
+`tsc -p tsconfig.json` 把 `src/` 输出到 `lib/types/`，最后运行适配边界、上游
+契约与 patch surface 门禁。`prepare` 生命周期只执行干净编译，让 npm Git URL
+安装无需仓库提交生成文件也能得到可运行的包；本地与 CI 使用显式命令，不依赖
+pnpm 是否隐式执行根包生命周期。
 
 生成产物规则：
 
-- 改 `src/`，**绝不直接改 `lib/types/`**。
-- 任何源码改动后运行 `pnpm build`，并提交对应的 `lib/types/` JavaScript、
-  `.d.ts` 与 `.d.ts.map` 变更。
-- `tsc` 不清理 `outDir`。重命名或删除源模块后，检查 `lib/types/` 并只删除该
-  模块的过期输出。
-- 审查生成的 diff。意外变化通常意味着编译器/配置或依赖的意外漂移。
+- 改 `src/`，**绝不直接改 `lib/`**。
+- 任何源码改动后运行 `pnpm build`，但不要提交 `lib/` 下的生成结果。
+- 干净编译会先删除整个 `lib/`，源模块重命名或删除后不会留下过期输出。
+- 运行 `pnpm verify:package` 检查 `main`、`types`、`bin` 与 `exports` 的所有目标
+  都进入 npm tarball，并 smoke-import 主入口和 invariant 入口。
 - 纯文档、纯 workflow、纯 YAML 改动不需要重建（除非同时改了 TypeScript 输入）。
-- `lib/invariant.js` 不由 `pnpm build` 生成。若 `src/invariant.ts` 或
-  `./invariant` 导出契约变化，显式保持打包文件与 `lib/types/invariant.d.ts`
-  对齐，并验证包导出。
+- 使用 `--ignore-scripts` 安装 Git URL 会跳过 `prepare`，因而不受支持；registry
+  包已经包含编译结果，不依赖消费者执行生命周期脚本。
 
 `scripts/build.sh` 是面向本地 DeepSeek Harness 源码检出的备用构建器（定位 DSH
 检出并重连依赖），不是本独立仓库的默认构建命令。
@@ -134,7 +133,10 @@ Cordis config
 CI 在安装后运行：
 
 ```sh
-pnpm build
+pnpm compile                               # 从干净目录生成运行时
+test -f lib/types/index.js
+pnpm verify:build                          # 构建门禁，不重复编译
+pnpm verify:package                        # npm tarball 与入口 smoke test
 node --import tsx/esm scripts/repro-askpanel.tsx
 node --import tsx/esm scripts/verify-askpanel-layout.tsx
 node --import tsx/esm scripts/repro-toolcards.tsx

@@ -149,6 +149,7 @@ const dict = {
   'context-tools': { zh: '工具 {{n}}', en: 'Tools {{n}}' },
 
   // ── screens/Chat.tsx ────────────────────────────────────────────────
+  'skill-unavailable': { zh: '技能 {{name}} 已不可用或未开放用户直调', en: 'Skill {{name}} is gone or not user-invocable' },
   'skill-audit-prompt': { zh: '请使用 audit 技能对当前项目做一次全面的代码审计，找出安全、正确性与质量问题。', en: 'Use the audit skill to do a thorough code audit of the current project, finding security, correctness and quality issues.' },
   'skill-bug-prompt': { zh: '请使用 bug 技能协助我记录一份完整的 bug 报告（现象、复现步骤、期望行为）。', en: 'Use the bug skill to help me write a complete bug report (symptoms, reproduction steps, expected behavior).' },
   'skill-practice-prompt': { zh: '请使用 practice 技能陪我进行一轮编程练习。', en: 'Use the practice skill to run a round of programming practice with me.' },
@@ -302,6 +303,7 @@ const dict = {
   'logo-tip-model': { zh: '切换模型', en: 'switch model' },
   'logo-tip-help': { zh: '查看命令', en: 'view commands' },
   'logo-tip-tab': { zh: '自动补全', en: 'autocomplete' },
+  'logo-tip-trace': { zh: '会话轨迹', en: 'trajectory' },
   'logo-tip-prefix': { zh: '提示：', en: 'Tip: ' },
 
   // ── components/PromptInput.tsx ──────────────────────────────────────
@@ -365,19 +367,50 @@ const dict = {
   'show-previous-messages': { zh: ' ctrl+e 显示前 {{n}} 条消息 ', en: ' ctrl+e to show {{n}} previous messages ' },
   'resume-none-in-cwd': { zh: '当前目录没有可恢复的历史会话', en: 'No resumable sessions in the current directory' },
 
-  // ── components/ResumePicker.tsx + screens/Chat.tsx (/resume) ────────
+  // ── screens/SessionBrowser.tsx + screens/Chat.tsx (/resume) ─────────
   'resume-resumed': { zh: '已恢复会话', en: 'Session resumed' },
-  'resume-more-above': { zh: '↑ 还有 {{n}} 条', en: '↑ {{n}} more' },
-  'resume-more-below': { zh: '↓ 还有 {{n}} 条', en: '↓ {{n}} more' },
   'resume-delete-confirm': { zh: '删除「{{name}}」？会话日志将被永久移除。', en: 'Delete "{{name}}"? The session log is removed permanently.' },
   'resume-deleted': { zh: '已删除会话「{{name}}」', en: 'Deleted session {{name}}' },
   'resume-delete-failed': { zh: '无法删除会话「{{name}}」', en: 'Could not delete session {{name}}' },
   'resume-rename-placeholder': { zh: '新的会话名称…', en: 'New session name…' },
   'resume-rename-failed': { zh: '无法重命名会话「{{name}}」', en: 'Could not rename session {{name}}' },
-  'resume-hint-list': { zh: '**Enter** 恢复 · Esc 退出 · {{mod}}d 删除 · {{mod}}r 重命名', en: '**Enter** to confirm · Esc to exit · {{mod}}d to delete · {{mod}}r to rename' },
   'resume-hint-delete': { zh: '**Enter** 删除 · Esc 取消', en: '**Enter** to delete · Esc to cancel' },
   'resume-hint-rename': { zh: '**Enter** 保存 · Esc 取消', en: '**Enter** to save · Esc to cancel' },
-  'resume-title': { zh: '恢复会话', en: 'Resume' },
+  'resume-title': { zh: '恢复会话', en: 'Resume session' },
+
+  // ── 会话浏览器：行、计数、筛选、预览 ───────────────────────────────
+  'session-loading': { zh: '正在读取会话…', en: 'Reading sessions…' },
+  'session-list-failed': { zh: '无法读取会话列表 · {{err}}', en: 'Could not read the session list · {{err}}' },
+  'session-resume-refused': { zh: '无法恢复这个会话——原因已记录在对话里（模型正在工作时无法切换）', en: 'That session could not be resumed — the reason is in the conversation (switching is refused while the model is working)' },
+  'session-resume-failed': { zh: '恢复会话失败 · {{err}}', en: 'Resuming the session failed · {{err}}' },
+  'session-when-now': { zh: '刚刚', en: 'just now' },
+  'session-when-minutes': { zh: '{{n}} 分钟前', en: '{{n}}m ago' },
+  'session-when-hours': { zh: '{{n}} 小时前', en: '{{n}}h ago' },
+  'session-when-days': { zh: '{{n}} 天前', en: '{{n}}d ago' },
+  'session-when-date': { zh: '{{month}} 月 {{day}} 日', en: '{{month}}/{{day}}' },
+  'session-children': { zh: '{{n}} 个子运行', en: '{{n}} runs' },
+  'session-kind-root': { zh: '对话', en: 'Conversation' },
+  'session-kind-fork': { zh: '回溯分支', en: 'Rewound branch' },
+  'session-kind-subagent': { zh: '子 agent 运行', en: 'Sub-agent run' },
+  'session-project-unknown': { zh: '（未记录目录）', en: '(no directory recorded)' },
+  'session-scope-all': { zh: '全部项目', en: 'all projects' },
+  'session-search-placeholder': { zh: '输入以搜索 · {{scope}}', en: 'Type to search · {{scope}}' },
+  'session-count-shown': { zh: '{{n}} 个会话', en: '{{n}} sessions' },
+  'session-count-subagents': { zh: '{{n}} 个子运行已折叠', en: '{{n}} runs folded' },
+  'session-count-empty': { zh: '{{n}} 个空会话', en: '{{n}} empty' },
+  'session-clean-confirm': { zh: '清理 {{n}} 个没有对话内容的会话？日志将被永久移除。', en: 'Remove {{n}} sessions that hold no conversation? Their logs are deleted permanently.' },
+  'session-cleaned': { zh: '已清理 {{n}} 个空会话', en: 'Removed {{n}} empty sessions' },
+  'session-preview-times': { zh: '创建于 {{created}} · 最后活动 {{updated}}', en: 'created {{created}} · last active {{updated}}' },
+  'session-preview-loading': { zh: '正在读取会话结尾…', en: 'Reading the end of this session…' },
+  'session-preview-empty': { zh: '这个会话没有可预览的往来消息', en: 'No exchanges to preview in this session' },
+  'session-toggle-on': { zh: '开', en: 'on' },
+  'session-toggle-off': { zh: '关', en: 'off' },
+  // Three widths of the same hint. The browser picks the widest that fits the
+  // terminal, because a hint that wraps costs the rows the list needs and can
+  // push its own tail off the bottom of the screen.
+  'session-hint-list': { zh: '**Enter** 恢复 · Tab 预览 · {{mod}}a 全部项目（{{projects}}） · {{mod}}s 子运行（{{runs}}） · {{mod}}b 本分支 · {{mod}}r 重命名 · {{mod}}d 删除 · {{mod}}x 清空壳 · Esc 退出', en: '**Enter** resume · Tab preview · {{mod}}a all projects ({{projects}}) · {{mod}}s runs ({{runs}}) · {{mod}}b this branch · {{mod}}r rename · {{mod}}d delete · {{mod}}x clean · Esc exit' },
+  'session-hint-list-mid': { zh: '**Enter** 恢复 · Tab 预览 · {{mod}}a 全部项目 · {{mod}}s 子运行 · {{mod}}r 重命名 · {{mod}}d 删除 · Esc 退出', en: '**Enter** resume · Tab preview · {{mod}}a projects · {{mod}}s runs · {{mod}}r rename · {{mod}}d delete · Esc exit' },
+  'session-hint-list-short': { zh: '**Enter** 恢复 · Tab 预览 · Esc 退出', en: '**Enter** resume · Tab preview · Esc exit' },
 
   // ── picker 通用快捷键提示（整句本地化，zh 不用 "to" 结构；**段** 渲染为粗体主快捷键）─
   'hint-confirm-exit': { zh: '**Enter** 确认 · Esc 退出', en: '**Enter** to confirm · Esc to exit' },
@@ -386,7 +419,6 @@ const dict = {
   'hint-rewind-back': { zh: '**Enter** 回退 · Esc 返回', en: '**Enter** to rewind · Esc to back' },
   'hint-adjust-done': { zh: '**←/→** 调整 · Enter/Esc 完成', en: '**←/→** to adjust · Enter/Esc to done' },
   'hint-history-search': { zh: '↑/↓ 选择 · **Enter** 确认 · Esc 取消', en: '↑/↓ to navigate · **Enter** to select · Esc to cancel' },
-  'hint-trace': { zh: '**↑/↓ PgUp/PgDn g/G** 滚动 · f 过滤 · Esc/q 关闭', en: '**↑/↓ PgUp/PgDn g/G** to scroll · f to filter · Esc/q to close' },
   'hint-expand-ctrl-o': { zh: '（ctrl+o 展开）', en: '(ctrl+o to expand)' },
 
   // ── components/ModelPicker.tsx / ThemePicker.tsx / ActivityPicker.tsx / EffortSlider.tsx ──
@@ -558,7 +590,7 @@ const dict = {
   'cmd-desc-agents': { zh: '查看本会话的子代理' },
   // Model / display
   'cmd-desc-activity': { zh: '切换工作状态指示器预设' },
-  'cmd-desc-preset': { zh: '切换 Agent 预设（standard/code/minimal/cordis）' },
+  'cmd-desc-preset': { zh: '切换 Agent 预设（含梁神模式）' },
   'cmd-desc-smart': { zh: '在当前 Agent 预设上切换 Smart 路由增强' },
   'cmd-desc-force-smart': { zh: '在当前 Agent 预设上切换 ForceSmart 锚定增强' },
   'cmd-desc-theme': { zh: '切换配色主题（auto 跟随系统，或内置/自定义）' },
@@ -612,15 +644,41 @@ const dict = {
   // ── screens/StatusLine.tsx ───────────────────────────────────────────
   'status-cache-label': { zh: '缓存 ', en: 'cache ' },
 
-  // ── components/TraceView.tsx (/trace, issue #80) ─────────────────────
-  'trace-title': { zh: '轨迹', en: 'Trace' },
-  'trace-subtitle': { zh: '会话事件时间线 · 过滤：{{filter}} · {{count}} 条', en: 'Session event timeline · filter: {{filter}} · {{count}} entries' },
-  'trace-empty': { zh: '暂无轨迹事件', en: 'No trace events yet' },
-  'trace-filter-all': { zh: '全部', en: 'all' },
-  'trace-filter-tool': { zh: '工具', en: 'tools' },
-  'trace-filter-thinking': { zh: '思考', en: 'thinking' },
-  'trace-filter-message': { zh: '消息', en: 'messages' },
-  'trace-filter-progress': { zh: '进度', en: 'progress' },
+  // ── screens/TrajectoryScene.tsx（issue #80 演进：全屏轨迹场景）──────────
+  'traj-title': { zh: '轨迹', en: 'Trajectory' },
+  'traj-totals': { zh: '{{turns}} 轮 · {{steps}} 步', en: '{{turns}} turns · {{steps}} rows' },
+  'traj-errors': { zh: '{{n}} 错', en: '{{n}} failed' },
+  'traj-retries': { zh: '{{n}} 重试', en: '{{n}} retries' },
+  'traj-matches': { zh: '{{n}}/{{total}} 匹配', en: '{{n}}/{{total}} matched' },
+  'traj-tab-timeline': { zh: '时序', en: 'Timeline' },
+  'traj-tab-hotspot': { zh: '热点', en: 'Hotspot' },
+  'traj-hot-tools': { zh: '工具', en: 'Tools' },
+  'traj-hot-model': { zh: '模型', en: 'Model' },
+  'traj-hot-turns': { zh: '轮次', en: 'Turns' },
+  'traj-sort-duration': { zh: '按耗时', en: 'by duration' },
+  'traj-sort-count': { zh: '按次数', en: 'by count' },
+  'traj-sort-tokens': { zh: '按 token', en: 'by tokens' },
+  'traj-proj-sequence': { zh: '序号等宽', en: 'even' },
+  'traj-proj-time': { zh: '真实墙钟', en: 'wall-clock' },
+  'traj-proj-compressed': { zh: '压缩空闲', en: 'compressed' },
+  'traj-hint-timeline': {
+    zh: '**↑/↓** 移动 · **←/→** 视图 · **[ ]** 跳错 · **{ }** 跳轮 · **/** 查询 · **m** 投影 · **enter** 详情 · **q** 退出',
+    en: '**↑/↓** move · **←/→** view · **[ ]** failures · **{ }** turns · **/** query · **m** projection · **enter** detail · **q** exit',
+  },
+  'traj-hint-hotspot': {
+    zh: '**↑/↓** 移动 · **←/→** 视图 · **t** 排序 · **enter** 回时序定位 · **q** 退出',
+    en: '**↑/↓** move · **←/→** view · **t** sort · **enter** locate in timeline · **q** exit',
+  },
+  'traj-hint-query': {
+    zh: '**tool:** **kind:** **turn:** **err:** **run:** **>10s** **tok>1k** · 裸词全文 · **enter** 确认 · **esc** 清除',
+    en: '**tool:** **kind:** **turn:** **err:** **run:** **>10s** **tok>1k** · bare word = full text · **enter** apply · **esc** clear',
+  },
+  'traj-hint-expanded': {
+    zh: '**j/k** 翻页 · **enter/esc** 收起 · **q** 退出',
+    en: '**j/k** page · **enter/esc** collapse · **q** exit',
+  },
+  'traj-empty': { zh: '暂无轨迹事件', en: 'No trajectory events yet' },
+  'traj-hint-failure': { zh: '{{key}} 看完整轨迹', en: '{{key}} for the full trajectory' },
 } as const
 
 export type I18nKey = keyof typeof dict
@@ -629,7 +687,10 @@ export type I18nParams = Record<string, string | number>
 /** The active language, module-level so non-React modules (channel.ts,
  *  loaded-context.ts) resolve strings without a context. Defaults to `zh`
  *  (the original hard-coded language). */
-let activeLang: Lang = 'zh'
+// Resolved at import time (env var → persisted /lang → OS locale → zh) so
+// direct consumers of t() — repro/verify scripts that never reach
+// plugin.apply — still get the pinned language instead of a hardcoded zh.
+let activeLang: Lang = resolveStartupLang()
 
 /** Emitted on every language switch so React screens can re-render. */
 type Listener = () => void
@@ -727,25 +788,35 @@ export function writeLangPref(lang: Lang, dir: string = PREFS_DIR): boolean {
  * Guess the user's language from the OS locale (`LC_ALL`, `LC_MESSAGES`,
  * `LANG`), defaulting to `zh`. Only consulted when nothing else (env var,
  * cordis.yml `lang`, persisted `/lang` choice) pinned a language.
+ * The POSIX/C locale means "no locale selected" and conventionally maps to
+ * English — importantly it is what CI runners (LANG=C.UTF-8) report, so
+ * tests asserting English UI copy stay deterministic. An absent locale
+ * variable (typical on Windows) still defaults to `zh`.
  */
 export function detectLocaleLang(): Lang {
+  // `||` (not `??`): an EMPTY locale variable means "unset" and must fall
+  // through to the next one — runners and shells sometimes export LC_ALL=''.
   const raw =
-    process.env.LC_ALL ??
-    process.env.LC_MESSAGES ??
-    process.env.LANG ??
+    process.env.LC_ALL ||
+    process.env.LC_MESSAGES ||
+    process.env.LANG ||
     ''
   const locale = raw.split('.')[0]?.toLowerCase() ?? ''
   if (locale.startsWith('zh')) return 'zh'
   if (locale.startsWith('en')) return 'en'
+  if (locale === 'c' || locale === 'posix') return 'en'
   return 'zh'
 }
 
 /**
- * Resolve the startup language: the persisted `/lang` choice, else the OS
- * locale guess, else `zh` (the original hard-coded language). The env var /
- * config precedence lives in plugin.apply (see {@link resolveStartupLang}
- * consumers).
+ * Resolve the startup language: `DSH_TUI_LANG` when it holds a valid value
+ * (pinned at process start — the repro/verify scripts rely on this for
+ * deterministic UI copy), else the persisted `/lang` choice, else the OS
+ * locale guess, else `zh` (the original hard-coded language). The
+ * cordis.yml `lang` precedence lives in plugin.apply.
  */
 export function resolveStartupLang(): Lang {
+  const envLang = process.env.DSH_TUI_LANG
+  if (isLang(envLang)) return envLang
   return readLangPref() ?? detectLocaleLang()
 }
