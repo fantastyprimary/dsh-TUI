@@ -15,8 +15,7 @@ type Props = {
 }
 
 /**
- * Assistant text message:  bullet + markdown body (ported from the
- * leak's  default branch).
+ * Assistant text message:  bullet + markdown body (mirroring Claude Code's  default branch).
  */
 export function AssistantTextMessage({
   text,

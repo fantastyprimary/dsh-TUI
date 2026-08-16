@@ -8,7 +8,7 @@ import stripAnsi from 'strip-ansi'
 import { formatToken, padAligned } from '../cc/markdown.js'
 import type { CliHighlight } from '../cc/cliHighlight.js'
 
-/** Accounts for parent indentation and terminal resize races (from the leak). */
+/** Accounts for parent indentation and terminal resize races (from Claude Code). */
 const SAFETY_MARGIN = 4
 
 /** Minimum column width to prevent degenerate layouts */
@@ -57,7 +57,7 @@ function wrapText(
 
 /**
  * Renders a markdown table with proper column sizing, cell wrapping and box
- * borders (ported from the leak's `MarkdownTable.tsx`). Falls back to a
+ * borders, mirroring Claude Code's `MarkdownTable.tsx`. Falls back to a
  * vertical key-value format on narrow terminals.
  */
 export function MarkdownTable({

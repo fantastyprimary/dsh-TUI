@@ -1,8 +1,8 @@
 import React from 'react';
 type Status = 'success' | 'error' | 'warning' | 'info' | 'pending' | 'loading';
 /**
- * A status indicator icon with the CC color mapping (ported from the leak's
- * design-system/StatusIcon.tsx): ✓ green / ✗ red / ⚠ amber / ℹ blue /
+ * A status indicator icon with the CC color mapping, mirroring Claude Code's
+ * design-system/StatusIcon.tsx: ✓ green / ✗ red / ⚠ amber / ℹ blue /
  * ○ dim / … dim.
  */
 export declare function StatusIcon({ status, withSpace, }: {

@@ -6,7 +6,7 @@ import { Select } from './Select.js'
 import { HintLine } from './design-system/HintLine.js'
 
 /**
- * The `/thinking` dialog, ported from the leak's ThinkingToggle.tsx: a
+ * The `/thinking` dialog, mirroring Claude Code's ThinkingToggle.tsx: a
  * permission-colored Pane with a bold title, the Enabled/Disabled select
  * (with CC's option descriptions), and the Enter/Esc hint line.
  *

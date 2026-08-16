@@ -10,7 +10,7 @@ import { listWindow } from './listWindow.js'
 import { historyEntryId, type HistoryEntry } from '../history.js'
 
 /**
- * The ctrl+r history search dialog, in the shape of the leak's
+ * The ctrl+r history search dialog, in the shape of Claude Code's
  * HistorySearchDialog/FuzzyPicker: a permission-colored Pane with a bold
  * title, the ⌕ SearchBox, the filtered history as ListItem rows (newest
  * first), and the ↑/↓ · Enter · Esc hint line. Keyboard handling lives in

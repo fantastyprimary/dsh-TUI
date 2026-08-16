@@ -143,6 +143,7 @@ macOS 自带 Terminal.app 会自行消费 `⌘` 快捷键，请继续使用 `Ctr
 | [交互与命令](docs/interaction.md) | 快捷键、鼠标、问卷、slash command 与会话工作流 |
 | [架构与限制](docs/architecture.md) | 运行链路、渲染与持久化设计、安全边界、已知限制 |
 | [贡献与开发约定](docs/contributing.md) | 贡献流程、仓库地图、构建产物、验证矩阵与修改规则 |
+| [插件开发指南](docs/plugins.md) | 插件接缝（会话事件 / 槽位 / 技能 / 主题 / prompt 段）、契约、规范与收录 |
 
 完整的中英文索引见 [`docs/README.md`](docs/README.md)。
 
@@ -246,6 +247,28 @@ pnpm smoke
 
 `pnpm build` 会把 `src/` 编译到已提交的 `lib/types/`。修改源码时必须同步生成产物；
 渲染、问卷和工具卡还需运行对应回归脚本。
+
+## 插件生态
+
+想为 dsh-TUI 做插件/扩展？欢迎加入生态：
+
+- **插件开发指南**：[`docs/plugins.md`](docs/plugins.md)（接缝、契约、规范与验证清单）
+- **生态组织**：[dsh-tui-ecosystem](https://github.com/dsh-tui-ecosystem)（社区插件与模板的家）
+- **模板仓库**：[plugin-template](https://github.com/dsh-tui-ecosystem/plugin-template)（从模板起步，5 分钟出一个插件）
+- **参考实现**：`dsh-working-activity`（实时工作状态行：TUI 槽位 + `activity/status` 会话事件双出口）
+
+核心仓库不迁移、社区插件独立成仓——组织只负责收录与背书，插件作者对自己的仓库保持完全所有权。
+
+## 社区
+
+- **生态组织**：[dsh-tui-ecosystem](https://github.com/dsh-tui-ecosystem) —— 社区插件、模板与收录列表的家。欢迎来发插件、提创意、互相取暖 🐋
+- **社区交流群**：使用问题、插件创意、功能许愿，都欢迎进来聊。
+
+| 微信群 | QQ 群（群号 572549239） |
+| :---: | :---: |
+| <img src="screenshots/wechat-group.jpg" alt="dsh-TUI 社区交流群微信群二维码" width="200"> | <img src="screenshots/qq-group.png" alt="dsh-TUI 社区交流群 QQ 群二维码" width="200"> |
+
+> 微信群二维码约 7 天过期一次，如遇失效请走 QQ 群（572549239），或开个 issue 提醒我们更新。
 
 ## 权限与安全边界
 

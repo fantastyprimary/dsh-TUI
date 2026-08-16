@@ -65,7 +65,7 @@ function resolveColor(
 
 /**
  * Theme-aware Box component that resolves theme color keys to raw colors
- * (ported from the leak's design-system).
+ * (in the Claude Code visual language).
  */
 function ThemedBox({
   borderColor,

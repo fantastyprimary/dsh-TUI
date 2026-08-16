@@ -8,7 +8,7 @@ type Props = {
     time?: number;
 };
 /**
- * The animated spinner glyph (·✢*✶✻✽ cycle), ported from the leak's
+ * The animated spinner glyph (·✢*✶✻✽ cycle), mirroring Claude Code's
  * `Spinner/SpinnerGlyph.tsx`. Interpolates toward red when stalled.
  */
 export declare function SpinnerGlyph({ frame, messageColor, stalledIntensity, reducedMotion, time, }: Props): React.ReactNode;

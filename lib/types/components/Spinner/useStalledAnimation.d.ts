@@ -1,6 +1,5 @@
 /**
- * Tracks the transition to red when tokens stop flowing (ported from the
- * leak's `Spinner/useStalledAnimation.ts`). Driven by the parent's animation
+ * Tracks the transition to red when tokens stop flowing (mirroring Claude Code's `Spinner/useStalledAnimation.ts`). Driven by the parent's animation
  * clock time instead of independent intervals, so it slows down when the
  * terminal is blurred.
  * @param time - Parent animation clock time in ms.

@@ -3,8 +3,7 @@ import Text from '../../ink/components/Text.js'
 import type { Theme } from '../../theme.js'
 
 /**
- * A proportional progress bar drawn with block glyphs, ported from the
- * leak's design-system/ProgressBar.tsx: `█` fills whole cells, the partial
+ * A proportional progress bar drawn with block glyphs, mirroring Claude Code's design-system/ProgressBar.tsx: `█` fills whole cells, the partial
  * cell uses the `▏▎▍▌▋▊▉` ladder for sub-cell precision, and the empty
  * remainder is spaces with the empty color as background.
  *

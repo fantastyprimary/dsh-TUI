@@ -1,6 +1,6 @@
 import React from 'react';
 /**
- * A single-line search input in the round-bordered box of the leak's
+ * A single-line search input in the round-bordered box of Claude Code's
  * SearchBox: `⌕ ` prefix, block cursor at `cursorOffset` (inverse cell).
  * When empty and focused, a solid block caret sits at the start and the
  * placeholder is right-aligned (dimmed) — kept off the caret's cell so the

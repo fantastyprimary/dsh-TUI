@@ -16,7 +16,8 @@ declare module 'react/compiler-runtime' {
 }
 
 // The fork renders custom DOM element names for its reconciler; the original
-// source's global.d.ts (which declared them) is not part of the leak.
+// source's global.d.ts (which declared them) is not part of the published
+// Claude Code source.
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {

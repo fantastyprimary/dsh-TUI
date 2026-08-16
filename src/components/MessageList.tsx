@@ -276,7 +276,7 @@ export function MessageList({
       )}
       {!showAll && hiddenCount > 0 && (
         <Box marginTop={1} onClick={onToggleAll}>
-          <Divider title={` ctrl+e to show ${hiddenCount} previous messages `} />
+          <Divider title={t('show-previous-messages', { n: hiddenCount })} />
         </Box>
       )}
       {topPad > 0 && <Box height={topPad} flexShrink={0} />}

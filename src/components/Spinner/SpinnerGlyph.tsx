@@ -20,7 +20,7 @@ type Props = {
 }
 
 /**
- * The animated spinner glyph (·✢*✶✻✽ cycle), ported from the leak's
+ * The animated spinner glyph (·✢*✶✻✽ cycle), mirroring Claude Code's
  * `Spinner/SpinnerGlyph.tsx`. Interpolates toward red when stalled.
  */
 export function SpinnerGlyph({

@@ -106,7 +106,8 @@ stdout 打印诊断；使用 stderr 的 `DSH_TUI_DEBUG` 或 `DSH_TUI_RENDER_LOG`
 `dsh-TUI` 本身不提供独立沙箱；实际能力由 `cordis.patch.yml` 挂载的 DSH 服务
 决定。审批走 `ctx.approval` seam：策略为 `ask` 时 TUI 以 CC 式审批面板作为
 answerer（`approval/request` waterfall），仅允许一次/拒绝两种决定——协议没有
-"总是允许"与反馈通道：
+"总是允许"与反馈通道；`/permission` 预设切换来自 dsh-base 的
+`permission-presets` 服务行：
 
 - 非 Windows 默认 `DSH_PERMISSION_MODE` 为 `workspace-write`，文件策略要求先观察
   文件，审批策略通常为 `ask`。

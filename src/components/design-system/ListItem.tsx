@@ -31,8 +31,8 @@ export type ListItemProps = {
 }
 
 /**
- * A list item for selection UIs (ported from the leak's
- * design-system/ListItem.tsx): `❯` pointer for the focused row, `✓`
+ * A list item for selection UIs, mirroring Claude Code's
+ * design-system/ListItem.tsx: `❯` pointer for the focused row, `✓`
  * checkmark for the selected row, description on an indented second line,
  * and CC's color states (focused = suggestion blue, selected = success
  * green).

@@ -15,6 +15,7 @@ the `.en.md` suffix.
 | 键盘、鼠标与命令 / Keyboard, mouse, and commands | [交互与命令](interaction.md) | [Interaction and commands](interaction.en.md) |
 | 运行链路、性能、安全与限制 / Runtime, performance, security, and limitations | [架构与限制](architecture.md) | [Architecture and limitations](architecture.en.md) |
 | 贡献与开发约定 / Contributing and development rules | [贡献指南](contributing.md) | [Contributing](contributing.en.md) |
+| 插件开发 / Plugin development | [插件开发指南](plugins.md) | [Plugin development](plugins.en.md) |
 
 ## 快速入口 / Quick Links
 

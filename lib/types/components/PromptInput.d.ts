@@ -39,7 +39,7 @@ export interface PromptInputProps {
  * only), `❯ ` prompt char (dimmed while a turn is working), the text with a
  * block cursor at the cursor position, and below it the slash-command
  * suggestion overlay (name column + description, selected row in the
- * `suggestion` color — ported from the leak's PromptInputFooterSuggestions).
+ * `suggestion` color — mirroring Claude Code's PromptInputFooterSuggestions).
  *
  * Empty input: a solid block caret on a blank cell and nothing else — no
  * placeholder text, so the terminal-painted IME preedit (pinyin) at the

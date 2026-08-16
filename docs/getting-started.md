@@ -48,6 +48,11 @@ dsh-tui
 
 ```sh
 npm install -g @deepseek-ai/dsh
+
+# pnpm 未安装时任选一种方式
+npm install -g pnpm
+# 或：corepack enable pnpm
+
 dsh plugin --profile dsh-tui add @deepseek-harness-tui/dsh-tui
 dsh --profile dsh-tui   # 或 dsh-tui
 ```

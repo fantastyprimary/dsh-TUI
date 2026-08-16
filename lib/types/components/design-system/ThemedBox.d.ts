@@ -30,7 +30,7 @@ export type Props = BaseStylesWithoutColors & ThemedColorProps & {
 };
 /**
  * Theme-aware Box component that resolves theme color keys to raw colors
- * (ported from the leak's design-system).
+ * (in the Claude Code visual language).
  */
 declare function ThemedBox({ borderColor, borderTopColor, borderBottomColor, borderLeftColor, borderRightColor, backgroundColor, ...rest }: PropsWithChildren<Props>): React.ReactNode;
 export default ThemedBox;

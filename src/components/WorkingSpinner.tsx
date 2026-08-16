@@ -8,7 +8,7 @@ import { sample } from 'lodash-es'
 
 /**
  * The working spinner block shown between the transcript and the prompt
- * input while a turn is in flight. Ported from the leak's `Spinner.tsx`
+ * input while a turn is in flight. Mirrors Claude Code's `Spinner.tsx`
  * (SpinnerWithVerb path) with the swarm/teammate/effort/tips branches
  * removed; the channel feeds the mode, token count and thinking status.
  *
@@ -62,7 +62,7 @@ export function WorkingSpinner({
 /**
  * Tracks thinking status: 'thinking' while the model is streaming reasoning,
  * then the duration in ms for a minimum 2s display (avoids UI jank). Ported
- * from the leak's SpinnerWithVerb effect.
+ * from Claude Code's SpinnerWithVerb effect.
  */
 export function useThinkingStatus(
   isThinking: boolean,

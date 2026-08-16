@@ -7,7 +7,7 @@ type Props = {
 };
 /**
  * Transcript-mode metadata row: `HH:MM · model`, right-aligned above the
- * assistant text (ported from the leak's MessageTimestamp + MessageModel,
+ * assistant text, mirroring Claude Code's MessageTimestamp + MessageModel,
  * collapsed into one row).
  */
 export declare function MessageMetadata({ timestamp, model, }: Props): React.ReactNode;

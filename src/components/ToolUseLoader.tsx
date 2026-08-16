@@ -11,7 +11,7 @@ type Props = {
 }
 
 /**
- * The status dot on tool-call rows (ported from the leak's ToolUseLoader):
+ * The status dot on tool-call rows, mirroring Claude Code's ToolUseLoader:
  * blinking `●` while running, green on success, red on error, dim when queued.
  */
 export function ToolUseLoader({

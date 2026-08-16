@@ -14,7 +14,7 @@ type Props = {
 
 /**
  * Renders a keyboard shortcut hint like "ctrl+o to expand" or "(tab to toggle)"
- * (ported from the leak's design-system). Wrap in `<Text dimColor>` for the
+ * (in the Claude Code visual language). Wrap in `<Text dimColor>` for the
  * common dim styling.
  */
 export function KeyboardShortcutHint({

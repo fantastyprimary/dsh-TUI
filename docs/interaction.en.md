@@ -177,10 +177,39 @@ keyboard:
 | `Space` | Toggle a multi-select option |
 | `Tab` | Switch to a custom text answer |
 | `Enter` | Submit the current question |
-| `Esc` | Cancel; the model receives `ASK_ABORTED` |
+| `Esc` | Cancel the whole batch of questions; the model receives `ASK_CANCELLED` (a harness-side abort still reports `ASK_ABORTED`) |
 
 Batched questions and concurrent subagent questions are shown one at a time in
 FIFO order. A compact Q&A summary is added to the local transcript afterward.
+
+## Plan review
+
+When the model calls `exit_plan_mode` in plan mode, the full plan is rendered
+as markdown in the review panel (the dedicated decision layout for
+`intent: plan-review`):
+
+| Key | Behavior |
+| --- | --- |
+| `Up/Down` | Move between the options and the feedback input line at the bottom |
+| `1`/`2` | Submit the corresponding option directly (when the feedback buffer is empty; otherwise digits are treated as feedback characters) |
+| Typing | Enters the feedback input line |
+| `Enter` (option row) | Submit that option; an approval row with feedback errors out — approval must carry no feedback, or the protocol treats it as “continue planning” |
+| `Enter` (input line) | Submit “continue planning” with the feedback text |
+| `Esc` | Interrupt the review to talk (`ASK_CANCELLED`); the model stays in plan mode |
+
+## Tool approval
+
+When the permission layer issues an `approval/request`, the approval panel
+shows the tool name, the full command extracted from the paired tool call, and
+the reason, and temporarily owns the keyboard (when a questionnaire is also
+pending, approval takes priority):
+
+| Key | Behavior |
+| --- | --- |
+| `Up/Down` | Move through options |
+| `1` / `2` | Allow (this time only) / deny |
+| `Enter` | Submit the focused item |
+| `Esc` / `Ctrl+C` | Deny (fail closed) |
 
 ## Slash commands
 

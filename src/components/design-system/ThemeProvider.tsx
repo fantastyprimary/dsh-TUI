@@ -235,7 +235,7 @@ export function ThemeProvider({
 
 /**
  * Resolves the active theme name and the runtime setter. Returns
- * `[themeName, setTheme]` — the first element matches the leak's shape.
+ * `[themeName, setTheme]` — the first element matches Claude Code's shape.
  */
 export function useTheme(): [string, (name: string) => boolean] {
   const { theme, setTheme } = useContext(ThemeContext)

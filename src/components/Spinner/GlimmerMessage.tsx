@@ -20,8 +20,7 @@ type Props = {
 const ERROR_RED = { r: 171, g: 43, b: 63 }
 
 /**
- * The shimmering verb message next to the spinner glyph, ported from the
- * leak's `Spinner/GlimmerMessage.tsx`.
+ * The shimmering verb message next to the spinner glyph, mirroring Claude Code's `Spinner/GlimmerMessage.tsx`.
  */
 export function GlimmerMessage({
   message,

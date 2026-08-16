@@ -6,7 +6,7 @@ import type { LocalCommand } from '../commands.js'
 import { localizedDescription } from '../commands.js'
 
 /**
- * The slash-command suggestion overlay, ported from the leak's
+ * The slash-command suggestion overlay, mirroring Claude Code's
  * `PromptInputFooterSuggestions.tsx` (command layout only): a name column
  * padded to a fixed width, optional `[tag]`, then a truncated description.
  * The selected row renders in the theme's `suggestion` color, others dim.
@@ -23,7 +23,7 @@ export function CommandSuggestions({
   if (commands.length === 0) return null
 
   // Cap the command name column at 40% of terminal width to ensure the
-  // description has space (same as the leak).
+  // description has space (same as Claude Code).
   const maxNameWidth = Math.floor(columns * 0.4)
   const nameWidth = Math.min(
     Math.max(...commands.map(c => stringWidth(c.name))) + 5,

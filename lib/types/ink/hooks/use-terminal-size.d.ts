@@ -1,5 +1,5 @@
 import { type TerminalSize } from '../components/TerminalSizeContext.js';
-/** Terminal dimensions from the Ink app shell (ported from the leak).
+/** Terminal dimensions from the Ink app shell (from Claude Code).
  * @returns the current terminal dimensions.
  */
 export declare function useTerminalSize(): TerminalSize;

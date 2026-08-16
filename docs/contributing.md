@@ -15,6 +15,9 @@
 
 ## 范围（Scope）
 
+本文件适用于整个仓库。它是 `@deepseek-harness-tui/dsh-tui` 的共享开发契约，
+适用于在本仓库工作的所有人与编码 Agent。
+
 `@deepseek-harness-tui/dsh-tui` 是单包、纯 ESM 的 TypeScript 项目：为 DeepSeek Harness 提供
 React 终端 UI 前门（通过 Cordis 挂载）。包内拥有 TUI、本地命令面、打包技能
 以及移植的 Ink/Yoga 渲染器；Agent、会话、模型、工具、持久化与策略域由

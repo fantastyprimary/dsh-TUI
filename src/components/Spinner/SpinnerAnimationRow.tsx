@@ -17,7 +17,7 @@ const SEP_WIDTH = stringWidth(' · ')
 const THINKING_BARE_WIDTH = stringWidth('thinking')
 const SHOW_TOKENS_AFTER_MS = 30_000
 
-// Thinking shimmer constants (same as the leak).
+// Thinking shimmer constants (same as Claude Code).
 const THINKING_INACTIVE = { r: 153, g: 153, b: 153 }
 const THINKING_INACTIVE_SHIMMER = { r: 185, g: 185, b: 185 }
 const THINKING_DELAY_MS = 3000
@@ -44,7 +44,7 @@ export type SpinnerAnimationRowProps = {
 }
 
 /**
- * The 50ms-animated portion of the working spinner, ported from the leak's
+ * The 50ms-animated portion of the working spinner, mirroring Claude Code's
  * `Spinner/SpinnerAnimationRow.tsx` with the swarm/teammate/effort branches
  * removed. Owns `useAnimationFrame(50)` and all values derived from the
  * animation clock (frame, glimmer, token counter animation, elapsed time,

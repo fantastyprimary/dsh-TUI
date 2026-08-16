@@ -38,7 +38,7 @@ type DividerProps = {
 
 /**
  * A horizontal divider line, optionally with a title in the middle
- * (ported from the leak's design-system).
+ * (in the Claude Code visual language).
  *
  * @example
  * // ─────────── Title ───────────

@@ -9,7 +9,7 @@ type Props = {
 };
 /**
  * Renders a markdown table with proper column sizing, cell wrapping and box
- * borders (ported from the leak's `MarkdownTable.tsx`). Falls back to a
+ * borders, mirroring Claude Code's `MarkdownTable.tsx`. Falls back to a
  * vertical key-value format on narrow terminals.
  */
 export declare function MarkdownTable({ token, highlight, forceWidth, }: Props): React.ReactNode;

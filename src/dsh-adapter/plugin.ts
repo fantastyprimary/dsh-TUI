@@ -124,10 +124,20 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // Packaged skills (/audit, /bug, …): contribute them through the host's
   // skill registry so they resolve with zero manual copying.
   registerPackagedSkills(ctx)
-  userQuestions.registerProvider({
-    ask: request => questionStore.ask(request),
-  })
-  ctx.effect(() => () => questionStore.rejectAll())
+  // Yield to an incumbent provider instead of crashing the whole plugin tree
+  // (issue #98): the harness allows exactly ONE user-questions provider per
+  // context, and stacking this TUI onto a profile that already carries
+  // @deepseek-ai/dsh-web-app (its api-gateway registers first) used to fail
+  // the boot with DUPLICATE_PROVIDER. The incumbent UI then owns questionnaire
+  // rendering; this TUI's ask_user_question requests are answered there.
+  try {
+    userQuestions.registerProvider({
+      ask: request => questionStore.ask(request),
+    })
+    ctx.effect(() => () => questionStore.rejectAll())
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'DUPLICATE_PROVIDER') throw error
+  }
 
   // Child-process stderr guard (issue #17): MCP servers spawned with an
   // inherited stderr (the MCP SDK's stdio default) write straight to the
@@ -743,7 +753,7 @@ function writeStream(stream: NodeJS.WriteStream, data: string): Promise<void> {
 function runUpdate(ctx: Context, profile: string | undefined, sessionId: string): void {
   disposeRootAndThen(ctx, () => {
     if (profile === undefined) {
-      process.stderr.write('\ndsh-tui update aborted: no dsh profile resolved.\n')
+      process.stderr.write(`\n${t('update-aborted-no-profile')}\n`)
       process.exit(1)
     }
     void updateTuiAndRestart(sessionId, profile).then(

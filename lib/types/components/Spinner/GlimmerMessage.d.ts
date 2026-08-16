@@ -11,8 +11,7 @@ type Props = {
     stalledIntensity?: number;
 };
 /**
- * The shimmering verb message next to the spinner glyph, ported from the
- * leak's `Spinner/GlimmerMessage.tsx`.
+ * The shimmering verb message next to the spinner glyph, mirroring Claude Code's `Spinner/GlimmerMessage.tsx`.
  */
 export declare function GlimmerMessage({ message, mode, messageColor, glimmerIndex, flashOpacity, shimmerColor, stalledIntensity, }: Props): React.ReactNode;
 export {};

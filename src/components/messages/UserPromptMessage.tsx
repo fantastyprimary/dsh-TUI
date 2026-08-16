@@ -15,7 +15,7 @@ type Props = {
 
 /**
  * User prompt bubble: `❯ text` on the theme's userMessageBackground grey
- * (ported from the leak's `messages/UserPromptMessage.tsx` +
+ * (mirroring Claude Code's `messages/UserPromptMessage.tsx` +
  * `HighlightedThinkingText.tsx`, with the ultrathink rainbow removed).
  */
 export function UserPromptMessage({

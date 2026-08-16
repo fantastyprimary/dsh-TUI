@@ -6,7 +6,7 @@ const BLINK_INTERVAL_MS = 600
 
 /**
  * Hook for synchronized blinking animations that pause when offscreen
- * (ported from the leak's `src/hooks/useBlink.ts`).
+ * (mirroring Claude Code's `src/hooks/useBlink.ts`).
  *
  * @param enabled - Whether blinking is active
  * @param intervalMs - Blink cycle length in ms; defaults to 600.

@@ -3,7 +3,7 @@ import type { Color, Styles } from '../../ink/styles.js';
 import { type Theme } from '../../theme.js';
 /**
  * Colors uncolored ThemedText in the subtree. Precedence: explicit `color` >
- * this > dimColor (ported from the leak's design-system, where message rows
+ * this > dimColor (in the Claude Code visual language, where message rows
  * set it to `text` on hover).
  */
 export declare const TextHoverColorContext: React.Context<keyof Theme | undefined>;
@@ -49,7 +49,7 @@ export type Props = {
 };
 /**
  * Theme-aware Text component that resolves theme color keys to raw colors
- * (ported from the leak's design-system). This is what lets every ported CC
+ * (in the Claude Code visual language). This is what lets every ported CC
  * component use `color="subtle"`-style theme keys unchanged.
  */
 export default function ThemedText({ color, backgroundColor, dimColor, bold, italic, underline, strikethrough, inverse, wrap, children, }: Props): React.ReactNode;

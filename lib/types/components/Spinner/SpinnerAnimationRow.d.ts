@@ -21,7 +21,7 @@ export type SpinnerAnimationRowProps = {
     thinkingStatus: 'thinking' | number | null;
 };
 /**
- * The 50ms-animated portion of the working spinner, ported from the leak's
+ * The 50ms-animated portion of the working spinner, mirroring Claude Code's
  * `Spinner/SpinnerAnimationRow.tsx` with the swarm/teammate/effort branches
  * removed. Owns `useAnimationFrame(50)` and all values derived from the
  * animation clock (frame, glimmer, token counter animation, elapsed time,

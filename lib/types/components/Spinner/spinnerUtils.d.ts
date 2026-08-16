@@ -1,6 +1,7 @@
 /**
- * Spinner animation utilities, ported from the leaked Claude Code source
- * (`src/components/Spinner/utils.ts`).
+ * Spinner 动画的通用工具集：平台相关的帧字符选择、RGB 颜色插值、
+ * HSL 色相转 RGB，以及 `rgb(...)` 颜色字符串的解析与记忆化。
+ * 这些纯函数被 Spinner 组件及若干加载/装饰元素复用。
  */
 export type RGBColor = {
     r: number;
@@ -8,34 +9,28 @@ export type RGBColor = {
     b: number;
 };
 /**
- * The platform-appropriate default spinner character set.
- * @returns The spinner frame characters for the current terminal/platform.
+ * 返回适合当前终端/平台的 spinner 帧字符序列。
+ * 每次调用都返回独立数组，调用方可以安全持有或改动，互不影响。
  */
 export declare function getDefaultCharacters(): string[];
 /**
- * Interpolate between two RGB colors.
- * @param color1 - Start color.
- * @param color2 - End color.
- * @param t - Interpolation factor, 0 to 1.
- * @returns The interpolated color, components rounded to integers.
+ * 在两种颜色之间按系数 t 线性插值（t ∈ [0, 1]），
+ * 各分量四舍五入到整数后返回。
  */
 export declare function interpolateColor(color1: RGBColor, color2: RGBColor, t: number): RGBColor;
 /**
- * Convert an RGB object to an `rgb()` color string for the Text component.
- * @param color - The RGB color to format.
- * @returns The `rgb(r,g,b)` string.
+ * 把 RGB 对象格式化为 `rgb(r,g,b)` 字符串，供 Ink 的 Text 组件使用。
  */
 export declare function toRGBColor(color: RGBColor): string;
 /**
- * Convert an HSL hue to RGB, using voice-mode waveform parameters (s=0.7, l=0.6).
- * @param hue - Hue in degrees (0–360; wrapped into range).
- * @returns The RGB color for the hue.
+ * 把色相角（单位：度）转换为 RGB 颜色。
+ * 采用固定饱和度 0.7、亮度 0.6 的 HSL 参数（波形动画的配色基准）；
+ * 色相先归一化到 [0, 360)，任意角度（含负数、超一圈）都能安全转换。
  */
 export declare function hueToRgb(hue: number): RGBColor;
 /**
- * Parse an `rgb(r,g,b)` color string, memoized per input.
- * @param colorStr - The color string to parse.
- * @returns The parsed RGB color, or null when the string is not `rgb(r,g,b)`.
+ * 解析 `rgb(r,g,b)` 颜色字符串；格式不合法时返回 null。
+ * 同一输入的解析结果会被缓存（含 null），之后取用零成本。
  */
 export declare function parseRGB(colorStr: string): RGBColor | null;
 //# sourceMappingURL=spinnerUtils.d.ts.map
