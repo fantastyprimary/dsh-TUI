@@ -109,6 +109,7 @@ try {
     '@deepseek-harness-tui',
     'dsh-tui',
   )
+  const profileNodeModules = join(dshHome, 'profiles', 'dsh-tui', 'node_modules')
   for (const file of [
     'bin/dsh-tui.js',
     'cordis.patch.yml',
@@ -116,6 +117,7 @@ try {
   ]) {
     assertSameFile(join(repoRoot, file), join(installed, file))
   }
+  run('node', [join(repoRoot, 'scripts/verify-tool-runtime-graph.mjs'), profileNodeModules])
 
   // Keep the current file dependency available, but cap the script-owned cache
   // so repeated same-version development runs do not accumulate tarballs.
