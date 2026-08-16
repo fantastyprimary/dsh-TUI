@@ -77,7 +77,7 @@ test('Smart default and per-session state persist independently', () => {
   assert.equal(readSmartSession('alpha'), false)
 })
 
-test('a fork child uses its sidecar until it emits a local request header', () => {
+test('a fork child uses its sidecar even when inherited legacy headers disagree', () => {
   const inherited = requestHeader(3, true)
   const child = session('child-before-request', 4, [inherited])
 
@@ -86,21 +86,21 @@ test('a fork child uses its sidecar until it emits a local request header', () =
   assert.equal(smartModeOf(child, undefined), true)
 })
 
-test('the first child-local request header supersedes sidecar and inherited state', () => {
+test('the sidecar remains authoritative over child-local legacy headers', () => {
   const inheritedOn = requestHeader(3, true)
   assert.equal(
     smartModeOf(session('child-off', 4, [inheritedOn, requestHeader(4, false)]), true),
-    false,
+    true,
   )
 
   const inheritedOff = requestHeader(3, false)
   assert.equal(
     smartModeOf(session('child-on', 4, [inheritedOff, requestHeader(4, true)]), false),
-    true,
+    false,
   )
 })
 
-test('ordinary and legacy sessions derive Smart from their latest request header', () => {
+test('legacy sessions derive Smart from request headers only without a sidecar', () => {
   assert.equal(smartModeOf(session('ordinary-on', undefined, [requestHeader(0, true)]), undefined), true)
   assert.equal(
     smartModeOf(session('ordinary-off', undefined, [requestHeader(0, true), requestHeader(1, false)]), undefined),
@@ -109,7 +109,7 @@ test('ordinary and legacy sessions derive Smart from their latest request header
   assert.equal(smartModeOf(session('legacy-empty', undefined, []), undefined), false)
 })
 
-test('persisted resolution applies the same child-local precedence', async () => {
+test('persisted resolution applies sidecar precedence', async () => {
   writeSmartSession('persisted-child', true)
   const persisted = session('persisted-child', 2, [requestHeader(1, true), requestHeader(2, false)])
   const ctx = {
@@ -123,7 +123,14 @@ test('persisted resolution applies the same child-local precedence', async () =>
       }
     },
   }
-  assert.equal(await resolvePersistedSmart(ctx, 'persisted-child'), false)
+  assert.equal(await resolvePersistedSmart(ctx, 'persisted-child'), true)
+})
+
+test('marker-free request headers retain explicit sidecar state', () => {
+  const markerFree = session('marker-free', 0, [requestHeader(0, false)])
+  assert.equal(smartModeOf(markerFree, true), true)
+  assert.equal(smartModeOf(markerFree, false), false)
+  assert.equal(smartModeOf(markerFree, undefined), false)
 })
 
 test('corrupt preference data fails closed', () => {

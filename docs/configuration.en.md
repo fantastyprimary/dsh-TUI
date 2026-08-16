@@ -194,9 +194,14 @@ and `/force-smart on` disables Smart in the same single replacement-session
 fork. Turning the active enhancement off does not restore the previous one.
 Explicit configuration wins persisted defaults; ForceSmart wins when both
 explicit booleans are true. State is stored separately in
-`~/.dsh-tui/smart.json` and `~/.dsh-tui/force-smart.json`. Child-local request
-headers override sidecars and inherited headers so `/resume`, rewind,
-`/model`, `/new`, and workspace ownership recompose against the target session.
+`~/.dsh-tui/smart.json` and `~/.dsh-tui/force-smart.json`. The per-session
+sidecar is authoritative for sessions created by current builds. New requests
+do not encode internal mode markers or explanatory metadata in the
+model-visible system prompt. Markers in legacy `request/header` events are
+read only as a migration fallback when no sidecar exists, so `/resume`,
+rewind, `/model`, `/new`, and workspace ownership still recompose against the
+target session. While an enhancement is active, the input arrow and persistent
+status line identify Smart or ForceSmart; the default state adds no marker.
 
 Native DSH spawn, fork, and continuable children inherit the parent's active
 enhancement. The overlay never registers new tools in child scope or bypasses

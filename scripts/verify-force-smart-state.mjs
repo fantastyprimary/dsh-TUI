@@ -86,7 +86,7 @@ test('ForceSmart default and per-session state persist in force-smart.json', () 
   assert.equal(readForceSmartSession('alpha'), false)
 })
 
-test('a fork child uses its ForceSmart sidecar before its first local header', () => {
+test('a fork child uses its ForceSmart sidecar even when legacy headers disagree', () => {
   const inherited = requestHeader(3, { forceSmart: true })
   const child = session('child-before-request', 4, [inherited])
 
@@ -94,18 +94,18 @@ test('a fork child uses its ForceSmart sidecar before its first local header', (
   assert.equal(forceSmartModeOf(child, true), true)
 })
 
-test('the latest child-local request header overrides sidecar and inherited state', async () => {
+test('the ForceSmart sidecar overrides child-local and inherited legacy headers', async () => {
   const localOff = session('child-local-off', 4, [
     requestHeader(3, { forceSmart: true }),
     requestHeader(4),
   ])
-  assert.equal(forceSmartModeOf(localOff, true), false)
+  assert.equal(forceSmartModeOf(localOff, true), true)
 
   const localOn = session('child-local-on', 4, [
     requestHeader(3),
     requestHeader(4, { forceSmart: true }),
   ])
-  assert.equal(forceSmartModeOf(localOn, false), true)
+  assert.equal(forceSmartModeOf(localOn, false), false)
 
   assert.equal(writeForceSmartSession('persisted-child', true), true)
   const persisted = session('persisted-child', 4, [
@@ -123,7 +123,7 @@ test('the latest child-local request header overrides sidecar and inherited stat
       }
     },
   }
-  assert.equal(await resolvePersistedForceSmart(ctx, 'persisted-child'), false)
+  assert.equal(await resolvePersistedForceSmart(ctx, 'persisted-child'), true)
 })
 
 test('an inherited ForceSmart marker is recognized when no sidecar exists', () => {
@@ -138,7 +138,7 @@ test('an inherited ForceSmart marker is recognized when no sidecar exists', () =
   assert.equal(forceSmartModeOf(smartOnly), false)
 })
 
-test('only a ForceSmart sidecar may disambiguate a marker-free Minimal bootstrap header', async () => {
+test('a ForceSmart sidecar identifies marker-free Minimal bootstrap headers', async () => {
   const markerFree = session('marker-free', 0, [
     {
       type: 'request/header',

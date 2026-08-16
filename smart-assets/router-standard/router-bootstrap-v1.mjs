@@ -165,13 +165,12 @@ export function apply(ctx, config) {
     // 规则 sections 全部移除（minimal 的 complete:true 语义，实测 46 字符 system →
     // 25 步迭代工作流）。
     // spec（深度思考优先）: 分类 persona + 保留全部 sections（首轮超长思维链是特征）。
-    const smartSections = (assembled.sections || []).filter((section) => section.name === 'dsh-tui:smart')
     let sections
     let core
     let persona
     if (routerMode === 'standard') {
       persona = RL_PERSONA
-      sections = [...smartSections, { name: 'router-persona', text: persona, order: 0 }]
+      sections = [{ name: 'router-persona', text: persona, order: 0 }]
       core = new Set(['str_replace_editor']) // RL shape: shell + editor
     } else if (routerMode === 'pro') {
       // V4 Pro commits to its task interface on the first request. Maintenance
@@ -180,7 +179,7 @@ export function apply(ctx, config) {
       persona = personaFor(mode, modelId)
       sections = bandOf(mode) === 'react'
         ? applyPersona(assembled.sections, persona)
-        : [...smartSections, { name: 'router-persona', text: persona, order: 0 }]
+        : [{ name: 'router-persona', text: persona, order: 0 }]
       core = new Set(coreFor(mode))
     } else {
       persona = personaFor(mode, modelId)

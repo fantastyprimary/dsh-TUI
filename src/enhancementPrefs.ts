@@ -34,7 +34,8 @@ interface EnhancementPrefs {
 
 export interface EnhancementPrefsDefinition {
   readonly file: string
-  readonly marker: string
+  /** Marker emitted by older dsh-tui builds; read-only migration input. */
+  readonly legacyPromptMarker: string
 }
 
 export interface EnhancementSelection {
@@ -154,7 +155,7 @@ export function requestHeaderOf(event: EnhancementSessionEvent | undefined): Enh
 }
 
 function headerEnabled(definition: EnhancementPrefsDefinition, event: EnhancementSessionEvent | undefined): boolean | undefined {
-  return requestHeaderOf(event)?.system?.includes(definition.marker)
+  return requestHeaderOf(event)?.system?.includes(definition.legacyPromptMarker)
 }
 
 export function enhancementModeOf(
@@ -162,11 +163,14 @@ export function enhancementModeOf(
   session: { header: EnhancementSessionHeader; events: readonly EnhancementSessionEvent[] },
   stored: boolean | undefined = readEnhancementSession(definition, String(session.header.id)),
 ): boolean {
+  // New builds keep enhancement state out of the model-visible prompt. The
+  // per-session sidecar is therefore authoritative when present; header
+  // markers are a migration fallback for sessions written by older builds.
+  if (stored !== undefined) return stored
   const localStart = session.header.seedLength ?? 0
   const localHeader = session.events.findLast(event => event.seq >= localStart && event.type === 'request/header')
   const local = headerEnabled(definition, localHeader)
   if (local !== undefined) return local
-  if (stored !== undefined) return stored
   const inherited = headerEnabled(definition, session.events.findLast(event => event.type === 'request/header'))
   return inherited ?? false
 }

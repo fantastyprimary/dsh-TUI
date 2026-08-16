@@ -33,7 +33,7 @@
             "agent.cordis.yml": "ade057831fa1b9297f8cb41a00b0bb96b9467d4909aeb90f91d8a55a40c058b1",
             "preset.yml": "335c8e7d7cc42b1f7a5e3fbe4be35fa89998b297728398bb37074923622fd769",
             "router-bootstrap.mjs": "a64ef30346cbd73cabe4c92598794ac70c3842184815f907c0033483022fd03e",
-            "router-bootstrap-v1.mjs": "e7893187d6d44389e6fe0b0911a9fdf61e90b4614ccab5e1651a2f5d404e7f53",
+            "router-bootstrap-v1.mjs": "62d9ba24c44a4c4cee5031b2e262d9f1aa404778bda4152aae4602a986f17458",
             "router-core.mjs": "b2c3851f099d174e0b3e3cfe6a10f52a5f3299c8bb419473e2f7388c45ae1416"
           }
         },

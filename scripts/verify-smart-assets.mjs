@@ -374,7 +374,6 @@ test('Smart routing preserves delegated persona and policy contexts', async () =
   harness.insert('Build a new delegated application.')
   const sections = [
     { name: 'deployment:persona', text: 'Delegated specialist.' },
-    { name: 'dsh-tui:smart', text: '<!-- dsh-tui-smart:v1 -->' },
   ]
   const contexts = [
     { name: 'subagent:delegation', text: 'Do not widen permissions.' },

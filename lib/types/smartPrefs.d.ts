@@ -1,5 +1,6 @@
 /** Durable Smart enhancement preference and per-session fork state. */
 import { type EnhancementSessionEvent, type EnhancementSessionHeader } from './enhancementPrefs.js';
+/** Read-only compatibility marker for request headers written before 0.6.2. */
 export declare const SMART_PROMPT_MARKER = "<!-- dsh-tui-smart:v1 -->";
 export declare const readSmartDefault: (dir?: string) => boolean | undefined;
 export declare const writeSmartDefault: (enabled: boolean, dir?: string) => boolean;

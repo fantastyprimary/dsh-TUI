@@ -129,6 +129,13 @@ function headerEvents(capture) {
   return capture.events.filter(event => event.type === 'request/header')
 }
 
+function hasEnhancementMetadata(system = '') {
+  return system.includes('<!-- dsh-tui-smart:v1 -->')
+    || system.includes('<!-- dsh-tui-force-smart:v1 -->')
+    || system.includes('Smart task routing is active')
+    || system.includes('ForceSmart two-phase anchoring is active')
+}
+
 function localHeader(capture) {
   const start = capture.meta.seedLength ?? 0
   return capture.events.findLast(event => event.type === 'request/header' && event.seq >= start)
@@ -211,8 +218,6 @@ try {
     { default: AgentLoop },
     { createChannel },
     { composePreset },
-    { SMART_PROMPT_MARKER },
-    { FORCE_SMART_PROMPT_MARKER },
     { SUPER_INJECTOR_TOOL_NAMES },
   ] = await Promise.all([
     import('@deepseek-ai/cordis'),
@@ -224,8 +229,6 @@ try {
     import(agentLoopEntry),
     import('../lib/types/dsh-adapter/channel.js'),
     import('../lib/types/dsh-adapter/presets.js'),
-    import('../lib/types/smartPrefs.js'),
-    import('../lib/types/forceSmartPrefs.js'),
     import('../lib/types/dsh-adapter/smartRuntime.js'),
   ])
 
@@ -419,6 +422,8 @@ try {
   check('Fresh Standard + ForceSmart: system prompt is byte-aligned with Minimal',
     freshForce.request.system === 'You are a helpful software engineer assistant.',
     freshForce.request.system)
+  check('Fresh Standard + ForceSmart: no enhancement metadata enters the prompt',
+    !hasEnhancementMetadata(freshForce.request.system))
   check('Fresh Standard + ForceSmart: compatible shell/editor bootstrap surface',
     same(toolNames(freshForce), [PLATFORM_SHELL, 'str_replace_editor']),
     toolNames(freshForce).join(', '))
@@ -447,8 +452,8 @@ try {
   assertFullHeader('Promoted Standard + ForceSmart', promotedForce)
   check('Promoted Standard + ForceSmart: native request budget is restored',
     promotedForce.request.maxTokens === undefined)
-  check('Promoted Standard + ForceSmart: durable marker returns after bootstrap',
-    promotedForce.request.system.includes(FORCE_SMART_PROMPT_MARKER))
+  check('Promoted Standard + ForceSmart: no enhancement metadata enters the prompt',
+    !hasEnhancementMetadata(promotedForce.request.system))
   check('Promoted Standard + ForceSmart: native policy context is restored',
     JSON.stringify(promotedForce.request.messages).includes('Runtime policy sentinel'))
   check('Promoted Standard + ForceSmart: goal, subagent, and workflow tools are restored',
@@ -486,9 +491,9 @@ try {
     'Design the feature while plan mode is active.',
   )
   assertFullHeader('Active plan + ForceSmart', forcePlan)
-  check('Active plan + ForceSmart: plan prompt and marker survive intact',
+  check('Active plan + ForceSmart: plan prompt survives without enhancement metadata',
     forcePlan.request.system.includes('ForceSmart active plan plan workflow sentinel.')
-      && forcePlan.request.system.includes(FORCE_SMART_PROMPT_MARKER))
+      && !hasEnhancementMetadata(forcePlan.request.system))
   check('Active plan + ForceSmart: native budget, contexts, and workflow catalog pass through',
     forcePlan.request.maxTokens === undefined
       && JSON.stringify(forcePlan.request.messages).includes('ForceSmart active plan workflow context sentinel.')
@@ -552,8 +557,8 @@ try {
     'Inspect the delegated problem and report the result.',
   )
   assertFullHeader('ForceSmart inherited subagent', forceChild)
-  check('ForceSmart inherited subagent: child receives the same enhancement marker',
-    forceChild.request.system.includes(FORCE_SMART_PROMPT_MARKER))
+  check('ForceSmart inherited subagent: no enhancement metadata enters the child prompt',
+    !hasEnhancementMetadata(forceChild.request.system))
   check('ForceSmart inherited subagent: child never gains an enhancement-owned editor',
     BASE_TOOL_NAMES.every(name => toolNames(forceChild).includes(name))
       && !toolNames(forceChild).includes('str_replace_editor'),
@@ -605,8 +610,10 @@ try {
   check('Fresh Standard + Smart: exact Anchored shell/editor surface',
     same(toolNames(freshStandard), [PLATFORM_SHELL, 'str_replace_editor']),
     toolNames(freshStandard).join(', '))
-  check('Fresh Standard + Smart: Smart marker survives first-request section filtering',
-    freshStandard.request.system.includes(SMART_PROMPT_MARKER))
+  check('Fresh Standard + Smart: prompt is the exact Router Standard persona without metadata',
+    freshStandard.request.system === 'You are a helpful software engineer assistant.'
+      && !hasEnhancementMetadata(freshStandard.request.system),
+    freshStandard.request.system)
   check('Fresh Standard + Smart: runtime policy context is quarantined on the first request',
     !JSON.stringify(freshStandard.request.messages).includes('Runtime policy sentinel'))
   const freshStandardMessages = JSON.stringify(freshStandard.request.messages)
@@ -645,8 +652,8 @@ try {
     'Please investigate this delegated task.',
   )
   assertFullHeader('Smart inherited Flash subagent', smartFlashChild)
-  check('Smart inherited Flash subagent: child receives the Smart marker',
-    smartFlashChild.request.system.includes(SMART_PROMPT_MARKER))
+  check('Smart inherited Flash subagent: no enhancement metadata enters the child prompt',
+    !hasEnhancementMetadata(smartFlashChild.request.system))
   check('Smart inherited Flash subagent: missing native editor fails open without expanding child tools',
     BASE_TOOL_NAMES.every(name => toolNames(smartFlashChild).includes(name))
       && !toolNames(smartFlashChild).includes('str_replace_editor'))
@@ -713,9 +720,9 @@ try {
     'Build the feature while plan mode is active.',
   )
   assertFullHeader('Active plan + Smart', activePlan)
-  check('Active plan + Smart: complete plan and Smart sections survive anchoring',
+  check('Active plan + Smart: complete plan sections survive without enhancement metadata',
     activePlan.request.system.includes('Active plan plan workflow sentinel.')
-      && activePlan.request.system.includes(SMART_PROMPT_MARKER))
+      && !hasEnhancementMetadata(activePlan.request.system))
   check('Active plan + Smart: exit, goal, subagent, and workflow tools remain available',
     WORKFLOW_TOOL_NAMES.every(name => toolNames(activePlan).includes(name)),
     toolNames(activePlan).join(', '))
@@ -762,9 +769,9 @@ try {
     }),
   )
   assertFullHeader('Active goal + Smart', activeGoal)
-  check('Active goal + Smart: complete Standard and Smart sections survive anchoring',
+  check('Active goal + Smart: complete Standard sections survive without enhancement metadata',
     activeGoal.request.system.includes('Standard request-integration persona.')
-      && activeGoal.request.system.includes(SMART_PROMPT_MARKER))
+      && !hasEnhancementMetadata(activeGoal.request.system))
   check('Active goal + Smart: exit, goal, subagent, and workflow tools remain available',
     WORKFLOW_TOOL_NAMES.every(name => toolNames(activeGoal).includes(name)),
     toolNames(activeGoal).join(', '))
@@ -842,7 +849,7 @@ try {
   const standard = await captureTurn('standard-off-before', 'Continue in Standard without Smart.')
   assertFullHeader('Standard before Smart', standard)
   const standardTools = toolNames(standard)
-  check('Standard before Smart: no Smart marker', !standard.request.system.includes(SMART_PROMPT_MARKER))
+  check('Standard before Smart: no enhancement metadata', !hasEnhancementMetadata(standard.request.system))
   check('Standard before Smart: base catalog is present',
     [...BASE_TOOL_NAMES, 'epoch_probe'].every(name => standardTools.includes(name)))
   check('Standard before Smart: Router and optional host management tools are absent',
@@ -869,9 +876,9 @@ try {
   assertFullHeader('Smart on', smart)
   assertForkSeed('Smart on', smart, standardParentId, standardParentEvents)
   const smartTools = toolNames(smart)
-  check('Smart on: complete system prompt is reassembled with the marker',
-    smart.request.system.includes(SMART_PROMPT_MARKER)
-      && smart.request.system !== standard.request.system)
+  check('Smart on: promoted system prompt stays native and metadata-free',
+    smart.request.system === standard.request.system
+      && !hasEnhancementMetadata(smart.request.system))
   check('Smart on: Router management tools are present after durable promotion',
     ROUTER_TOOL_NAMES.every(name => smartTools.includes(name)), smartTools.join(', '))
   check('Smart on: base Standard catalog remains available',
@@ -899,8 +906,8 @@ try {
   assertFullHeader('Standard after Smart', standardAgain)
   assertForkSeed('Smart off', standardAgain, smartParentId, smartParentEvents)
   const standardAgainTools = toolNames(standardAgain)
-  check('Standard after Smart: marker is absent from the rebuilt system prompt',
-    !standardAgain.request.system.includes(SMART_PROMPT_MARKER))
+  check('Standard after Smart: enhancement metadata is absent from the rebuilt system prompt',
+    !hasEnhancementMetadata(standardAgain.request.system))
   check('Standard after Smart: Router tools are absent',
     ROUTER_TOOL_NAMES.every(name => !standardAgainTools.includes(name)))
   check('Standard after Smart: every optional host management tool is filtered',
@@ -916,9 +923,9 @@ try {
   check('Standard after Smart: Smart request messages are an exact seed prefix',
     standardAgain.request.messages.length > smart.request.messages.length
       && same(standardAgain.request.messages.slice(0, smart.request.messages.length), smart.request.messages))
-  check('Standard after Smart: inherited Smart headers never become model messages',
-    headerEvents(standardAgain).some(event => event.data.header.system?.includes(SMART_PROMPT_MARKER))
-      && !JSON.stringify(standardAgain.request.messages).includes(SMART_PROMPT_MARKER))
+  check('Standard after Smart: every new header and model message remains metadata-free',
+    headerEvents(standardAgain).every(event => !hasEnhancementMetadata(event.data.header.system))
+      && !hasEnhancementMetadata(JSON.stringify(standardAgain.request.messages)))
 
   const standardAgainParentId = channel.agentId
   const standardAgainParent = rootContext.agents.get(SessionId(standardAgainParentId))
@@ -932,8 +939,9 @@ try {
   assertFullHeader('Smart after re-enable', smartAgain)
   assertForkSeed('Smart re-enable', smartAgain, standardAgainParentId, standardAgainParentEvents)
   const smartAgainTools = toolNames(smartAgain)
-  check('Smart re-enable: marker and complete Smart surface are restored exactly',
+  check('Smart re-enable: metadata-free prompt and complete Smart surface are restored exactly',
     smartAgain.request.system === smart.request.system
+      && !hasEnhancementMetadata(smartAgain.request.system)
       && same(smartAgainTools, smartTools))
   check('Smart re-enable: Standard request messages are an exact seed prefix',
     smartAgain.request.messages.length > standardAgain.request.messages.length

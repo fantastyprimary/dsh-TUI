@@ -485,8 +485,8 @@ try {
   assertForkRequest('Smart on', 0, initialSession)
   assertSuccessfulSwap('Smart on', 0, initialHandle, originalRows, true)
   check(
-    'Smart on: setup adds router and marker after mounting Standard',
-    same(onCreation.agentCtx.pluginCalls.map(call => call.name), ['tool-str-replace-editor', 'dsh-tui-smart-marker', 'router-bootstrap']),
+    'Smart on: setup adds the router after mounting Standard',
+    same(onCreation.agentCtx.pluginCalls.map(call => call.name), ['tool-str-replace-editor', 'router-bootstrap']),
     JSON.stringify(onCreation.agentCtx.pluginCalls.map(call => call.name)),
   )
   check(
@@ -524,7 +524,6 @@ try {
         ? ['dsh-tui-force-smart-windows-bash']
         : ['TerminalSessionService', 'terminal-bash', 'tool-bash-persistent']),
       'tool-str-replace-editor',
-      'dsh-tui-force-smart-marker',
       'dsh-tui-force-smart-bootstrap',
     ]),
     JSON.stringify(forceCreation.agentCtx.pluginCalls.map(call => call.name)),
@@ -557,7 +556,6 @@ try {
     'Smart re-enable: setup contains Smart only',
     same(smartAgainCreation.agentCtx.pluginCalls.map(call => call.name), [
       'tool-str-replace-editor',
-      'dsh-tui-smart-marker',
       'router-bootstrap',
     ]),
   )
@@ -635,7 +633,7 @@ try {
     failedCreation.setupCompleted === true &&
       failedCreation.rejected === true &&
       failedCreation.handle === undefined &&
-      same(failedCreation.agentCtx.pluginCalls.map(call => call.name), ['tool-str-replace-editor', 'dsh-tui-smart-marker', 'router-bootstrap']),
+      same(failedCreation.agentCtx.pluginCalls.map(call => call.name), ['tool-str-replace-editor', 'router-bootstrap']),
     JSON.stringify(failedCreation.agentCtx.pluginCalls.map(call => call.name)),
   )
   check(

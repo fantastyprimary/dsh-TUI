@@ -6,7 +6,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import * as StrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
 import { registerEnhancementAgent } from './enhancementInheritance.js'
-import { SMART_PROMPT_MARKER } from '../smartPrefs.js'
 import SmartHostRuntime from './smartRuntime.js'
 
 type RouterModule = {
@@ -43,25 +42,6 @@ function ensureSmartHost(ctx: Context): Promise<void> {
   return started
 }
 
-const markerPlugin = {
-  name: 'dsh-tui-smart-marker',
-  inject: ['systemPrompt'],
-  apply(ctx: Context) {
-    ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
-      const assembled = await next()
-      if (assembled.sections.some(section => section.name === 'dsh-tui:smart')) return assembled
-      return {
-        ...assembled,
-        sections: [{
-          name: 'dsh-tui:smart',
-          order: -91,
-          text: `${SMART_PROMPT_MARKER}\nSmart task routing is active over the selected agent preset.`,
-        }, ...assembled.sections],
-      }
-    })
-  },
-}
-
 export async function mountSmartEnhancement(
   hostCtx: Context,
   agentCtx: Context,
@@ -75,16 +55,12 @@ export async function mountSmartEnhancement(
     && agentCtx.tools.get('str_replace_editor', agentCtx.agent as Agent) === undefined) {
     await agentCtx.plugin(StrReplaceEditor, {})
   }
-  await agentCtx.plugin(markerPlugin)
   const router = await loadRouter()
   await agentCtx.plugin(router as unknown as { apply(ctx: Context, config: Record<string, never>): unknown }, {})
   registerEnhancementAgent(hostCtx, agentCtx.agent as Agent, 'smart', childCtx => {
     // agent/created is synchronous and precedes session-start/first assembly.
     // Never register tools in a child-local scope: DSH tool restrictions are
     // applied earlier in child setup and must remain the final capability cap.
-    markerPlugin.apply(childCtx)
     router.apply(childCtx, { registerTools: false })
   })
 }
-
-export default markerPlugin

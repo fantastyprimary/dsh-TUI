@@ -18,7 +18,8 @@ export interface EnhancementRequestHeader {
 }
 export interface EnhancementPrefsDefinition {
     readonly file: string;
-    readonly marker: string;
+    /** Marker emitted by older dsh-tui builds; read-only migration input. */
+    readonly legacyPromptMarker: string;
 }
 export interface EnhancementSelection {
     readonly smart: boolean;

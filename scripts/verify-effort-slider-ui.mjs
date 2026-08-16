@@ -13,6 +13,8 @@
  *   5. Shift+Tab (\x1b[Z) cycles the session mode; StatusLine shows the mode
  *      label; a plan-declaring mode recolors nothing observable here but the
  *      border token changes — asserted via channel.mode.plan.
+ *   6. Smart/ForceSmart state animates the input arrow and stays visible in
+ *      the StatusLine; the default state adds no enhancement label.
  *
  * Run with plain node against the compiled lib:
  *   node scripts/verify-effort-slider-ui.mjs
@@ -98,6 +100,8 @@ function makeChannel() {
     activityEnabled: false,
     contextBarEnabled: true,
     agentPreset: 'standard',
+    smart: false,
+    forceSmart: false,
     goal: undefined,
     todos: [],
     commandList: [
@@ -140,6 +144,11 @@ function makeChannel() {
       return () => listeners.delete(listener)
     },
     emit() { channel.version += 1; for (const listener of listeners) listener() },
+    setEnhancement(kind) {
+      channel.smart = kind === 'smart'
+      channel.forceSmart = kind === 'force-smart'
+      channel.emit()
+    },
     submit() {},
     steer() {},
     removePending: () => true,
@@ -259,6 +268,32 @@ await sleep(300)
 s = screen()
 check('zh: Esc closed the slider', !s.includes('推理强度'), '')
 setLang('en')
+
+// 7. Enhancement chrome: a short single-cell arrow transition plus a
+// persistent mode label; default mode remains unmarked.
+stdout.frames.length = 0
+channel.setEnhancement('smart')
+await sleep(140)
+s = screen()
+check('Smart activation animates the input arrow', s.includes('›') || s.includes('»'), s.slice(-300))
+await sleep(350)
+s = screen()
+check('Smart remains visible in the status line', s.includes('Smart'), s.slice(-300))
+
+stdout.frames.length = 0
+channel.setEnhancement('force-smart')
+await sleep(140)
+s = screen()
+check('ForceSmart activation animates the input arrow', s.includes('›') || s.includes('»'), s.slice(-300))
+await sleep(350)
+s = screen()
+check('ForceSmart replaces Smart in the status line', s.includes('ForceSmart'), s.slice(-300))
+
+stdout.frames.length = 0
+channel.setEnhancement(undefined)
+await sleep(250)
+s = screen()
+check('default enhancement state adds no status label', !s.includes('Smart'), s.slice(-300))
 
 instance.unmount()
 process.exit(failed)

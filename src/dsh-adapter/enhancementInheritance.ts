@@ -51,7 +51,7 @@ export function registerEnhancementAgent(
   stateFor(hostCtx).mounted.set(agent, { kind, installChild })
 }
 
-/** Runtime truth before a child's first request/header marker is durable. */
+/** Runtime truth before a child's first request/header or sidecar state is durable. */
 export function enhancementOf(hostCtx: Context, agent: Agent): EnhancementKind | undefined {
   return stateFor(hostCtx).mounted.get(agent)?.kind
 }

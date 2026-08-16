@@ -40,7 +40,7 @@ after(() => {
 })
 
 const runtime = await import('../lib/types/dsh-adapter/smartRuntime.js')
-const { SMART_PROMPT_MARKER } = await import('../lib/types/smartPrefs.js')
+const { writeSmartSession } = await import('../lib/types/smartPrefs.js')
 const { resolveDshProfileName } = await import('../lib/types/update.js')
 
 const {
@@ -154,6 +154,7 @@ function makeRuntimeContext({ services: initialServices = {} } = {}) {
 }
 
 function sessionWithSmart(id, enabled) {
+  writeSmartSession(id, enabled)
   return {
     header: { id, seedLength: 0 },
     events: [{
@@ -161,7 +162,7 @@ function sessionWithSmart(id, enabled) {
       seq: 0,
       data: {
         header: {
-          system: enabled ? `base\n${SMART_PROMPT_MARKER}` : 'base',
+          system: 'base',
         },
       },
     }],

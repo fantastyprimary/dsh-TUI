@@ -167,9 +167,11 @@ DeepSeek V4 Pro。
 Smart 与 ForceSmart 互斥。`/smart on` 会自动关闭 ForceSmart，`/force-smart on` 会自动
 关闭 Smart，且每次只创建一个 replacement session；关闭当前增强不会恢复之前的另一个。
 显式配置优先于持久默认，若两项显式同时为 `true`，ForceSmart 胜出。状态分别保存在
-`~/.dsh-tui/smart.json` 与 `~/.dsh-tui/force-smart.json`；session-local request header
-优先于 sidecar 和继承 header，确保 `/resume`、rewind、`/model`、`/new` 与 workspace
-归属按目标 session 重组。
+`~/.dsh-tui/smart.json` 与 `~/.dsh-tui/force-smart.json`，每个 session 的 sidecar 记录是
+新会话的权威状态源；新请求不会在模型可见的 system prompt 中写入内部模式 marker 或
+说明文字。旧版 `request/header` 中的 marker 只在 sidecar 缺失时用于迁移恢复，确保
+`/resume`、rewind、`/model`、`/new` 与 workspace 归属按目标 session 重组。启用增强时，
+输入箭头和常驻状态栏会显示 Smart 或 ForceSmart；默认状态不增加标记。
 
 DSH 原生 spawn、fork 与 continuable 子代理继承父级当前增强。增强不会在 child scope
 新增工具或绕过委派 `toolFilter`；子代理自己的 persona、delegation、sandbox 与 approval

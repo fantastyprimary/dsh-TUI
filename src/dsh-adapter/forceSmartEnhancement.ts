@@ -9,7 +9,6 @@ import * as TerminalBash from '@deepseek-ai/dsh-terminal-bash'
 import * as PersistentBash from '@deepseek-ai/dsh-tool-bash-persistent'
 import * as StrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
 import { registerEnhancementAgent } from './enhancementInheritance.js'
-import { FORCE_SMART_PROMPT_MARKER } from '../forceSmartPrefs.js'
 
 type ForceBootstrapModule = {
   readonly MINIMAL_BASH_SCHEMA: { readonly description: string }
@@ -99,25 +98,6 @@ async function mountMinimalTools(
   return ownedTools
 }
 
-const markerPlugin = {
-  name: 'dsh-tui-force-smart-marker',
-  inject: ['systemPrompt'],
-  apply(ctx: Context) {
-    ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
-      const assembled = await next()
-      if (assembled.sections.some(section => section.name === 'dsh-tui:force-smart')) return assembled
-      return {
-        ...assembled,
-        sections: [{
-          name: 'dsh-tui:force-smart',
-          order: -90,
-          text: `${FORCE_SMART_PROMPT_MARKER}\nForceSmart two-phase anchoring is active over the selected agent preset.`,
-        }, ...assembled.sections],
-      }
-    })
-  },
-}
-
 export async function mountForceSmartEnhancement(
   hostCtx: Context,
   agentCtx: Context,
@@ -132,7 +112,6 @@ export async function mountForceSmartEnhancement(
     bootstrap.MINIMAL_BASH_SCHEMA.description,
     basePreset !== 'code',
   )
-  await agentCtx.plugin(markerPlugin)
   await agentCtx.plugin(
     bootstrap as unknown as {
       apply(ctx: Context, config: { readonly ownedTools?: readonly string[] }): unknown
@@ -142,9 +121,6 @@ export async function mountForceSmartEnhancement(
   registerEnhancementAgent(hostCtx, agentCtx.agent as Agent, 'force-smart', childCtx => {
     // A delegated child keeps the toolFilter fixed by DSH setup. ForceSmart
     // may narrow an existing compatible surface but never adds capabilities.
-    markerPlugin.apply(childCtx)
     bootstrap.apply(childCtx, {})
   })
 }
-
-export default markerPlugin

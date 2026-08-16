@@ -207,7 +207,6 @@ function fullAssembly(overrides = {}) {
   return {
     sections: [
       { name: 'deployment:persona', text: 'base persona' },
-      { name: 'dsh-tui:force-smart', text: '<!-- dsh-tui-force-smart:v1 -->' },
       { name: 'tool:guidance', text: 'base guidance' },
     ],
     contexts: [
@@ -351,7 +350,6 @@ test('an active plan promotes immediately and preserves the downstream assembly'
   const assembled = fullAssembly({
     sections: [
       { name: 'deployment:persona', text: 'base persona' },
-      { name: 'dsh-tui:force-smart', text: '<!-- dsh-tui-force-smart:v1 -->' },
       { name: 'plan:policy', text: 'active plan' },
     ],
   })

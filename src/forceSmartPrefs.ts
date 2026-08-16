@@ -2,7 +2,6 @@
 import {
   type EnhancementSessionEvent,
   type EnhancementSessionHeader,
-  requestHeaderOf,
   enhancementModeOf,
   readEnhancementDefault,
   readEnhancementSession,
@@ -10,8 +9,9 @@ import {
   writeEnhancementSession,
 } from './enhancementPrefs.js'
 
+/** Read-only compatibility marker for request headers written before 0.6.2. */
 export const FORCE_SMART_PROMPT_MARKER = '<!-- dsh-tui-force-smart:v1 -->'
-const DEFINITION = { file: 'force-smart.json', marker: FORCE_SMART_PROMPT_MARKER } as const
+const DEFINITION = { file: 'force-smart.json', legacyPromptMarker: FORCE_SMART_PROMPT_MARKER } as const
 
 export const readForceSmartDefault = (dir?: string): boolean | undefined =>
   readEnhancementDefault(DEFINITION, dir)
@@ -26,21 +26,6 @@ export function forceSmartModeOf(
   session: { header: EnhancementSessionHeader; events: readonly EnhancementSessionEvent[] },
   stored: boolean | undefined = readForceSmartSession(String(session.header.id)),
 ): boolean {
-  const localStart = session.header.seedLength ?? 0
-  const localHeader = session.events.findLast(event =>
-    event.seq >= localStart && event.type === 'request/header')
-  const header = requestHeaderOf(localHeader)
-  if (header !== undefined) {
-    if (header.system?.includes(FORCE_SMART_PROMPT_MARKER)) return true
-    const tools = header.tools?.map(tool => tool.name) ?? []
-    const bootstrap = stored === true
-      && header.system === 'You are a helpful software engineer assistant.'
-      && header.config?.maxTokens === 1024
-      && tools.length === 2
-      && tools.includes('str_replace_editor')
-      && tools.includes('bash')
-    return bootstrap
-  }
   return enhancementModeOf(DEFINITION, session, stored)
 }
 
